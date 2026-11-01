@@ -66,7 +66,7 @@ export function parseDate(text, now = new Date()) {
 export function analyzeLocal(text, now = new Date(), manual = false) {
   const due = parseDate(text, now);
   const action = /提醒|提交|交付|完成|截止|截至|开会|会议|参加|回复|确认|处理|缴费|报送|准备|跟进|审核|审批|发送|联系|安排|记得|别忘|请|需要|务必|review|deadline|meeting|submit/i.test(text);
-  const noise = /无需(?:回复|处理|提醒)|不用提醒|仅供参考|广告|促销|退订|验证码/.test(text);
+  const noise = /无需(?:回复|处理|提醒)|不用提醒|仅供参考|广告|促销|退订|验证码|已(?:经)?(?:完成|提交|处理|回复|取消)|会议取消/.test(text);
   const shouldRemind = manual || (action && !noise);
   const priority = /紧急|立即|务必|重要|urgent|asap/i.test(text) ? 'high' : /有空|方便时|不急/.test(text) ? 'low' : 'medium';
   const lead = /提前\s*([\d一二两三四五六七八九十半]+)\s*(分钟|小时|天)/.exec(text);
