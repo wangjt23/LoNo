@@ -108,3 +108,66 @@ textarea { width: 100%; min-height: 78px; max-height: 120px; resize: none; backg
 @media (max-width: 1050px) { .sidebar { width: 205px; padding-left: 12px; padding-right: 12px; }#workspace { margin-left: 205px; }#content { padding: 30px 27px; }.topbar { padding: 0 27px; }.stats { gap: 11px; }.stats article { padding-left: 15px; gap: 10px; }.stat-note { left: 15px; }.stat-icon { width: 31px; height: 31px; } }
 @media (max-width: 580px) { .capture-content { padding-left: 19px; padding-right: 19px; }.capture-toolbar > span { font-size: 9px; }.hint-divider { padding: 0 3px; }.capture-foot { align-items: flex-start; }.capture-prompt { font-size: 20px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before { transition: none !important; animation: none !important; } }
+
+/* Native acrylic/vibrancy supplies the real desktop blur; these translucent
+   surfaces tint it without covering it with an opaque document background. */
+:root { background: transparent; }
+body { background: transparent; }
+.sidebar {
+  background: linear-gradient(145deg, #ffffff63, #ebeffa46);
+  border-right: 1px solid #ffffffa6;
+  backdrop-filter: blur(28px) saturate(145%);
+}
+.brand-mark { background: #ffffff70; border-color: #ffffffc9; box-shadow: 0 2px 8px #24345508, inset 0 1px 0 #fff; }
+nav button.active { background: #ffffff8c; box-shadow: 0 2px 7px #293f6009, inset 0 1px 0 #ffffffd6; }
+nav button:hover { background: #ffffff5c; }
+#workspace {
+  min-height: 100dvh;
+  background: linear-gradient(145deg, #ffffffb3, #f9faffbd);
+  box-shadow: -1px 0 0 #ffffff6b;
+}
+.topbar { background: #ffffff26; border-bottom-color: #ffffff9e; }
+.stats article { background: #ffffff63; border-color: #ffffffbd; box-shadow: inset 0 1px 0 #ffffffb3, 0 3px 14px #35466c04; }
+.task-panel, .settings-card, .connection-card { background: #ffffff8c; border-color: #ffffffbf; box-shadow: 0 4px 22px #3d4e7205, inset 0 1px 0 #ffffffcc; }
+.panel-header { border-bottom-color: #d7dceb73; }
+.task-row { border-bottom-color: #d7dceb66; }.task-row:hover { background: #ffffff59; }
+.search { background: #e5e9f369; border: 1px solid #ffffff80; }
+.secondary { background: #ffffff8c; border-color: #ffffffbf; box-shadow: inset 0 1px 0 #ffffffcc, 0 2px 7px #34416309; }
+.secondary:hover { background: #ffffffc9; }
+.info-box, .analysis-note { background: #edf0f78c; }
+.record { border-bottom-color: #d7dceb66; }
+.settings-save { background: #f9faff91; border-radius: 10px; }
+.capture-mode { background: transparent; }
+.capture-content {
+  background: linear-gradient(140deg, #ffffff54, #edf1ff30);
+  border: 1px solid #ffffffb8;
+  border-radius: 13px;
+  box-shadow: inset 0 1px 0 #ffffffe0, inset 0 -1px 0 #ffffff4d;
+}
+.capture-head { color: #596374; }
+.capture-prompt { color: #202635; }
+.capture-content textarea {
+  background: #ffffff80;
+  border-color: #ffffffc9;
+  box-shadow: inset 0 1px 2px #36435c08, 0 2px 10px #40517804;
+}
+.capture-content textarea:focus-visible { outline: 2px solid #007aff33; border-color: #77acfa9e; }
+.capture-content .field input, .capture-content .field select { background: #ffffffa3; border-color: #ffffffd1; box-shadow: 0 1px 4px #3e517005; }
+.capture-content .analysis-note { background: #dfe5f457; border: 1px solid #ffffff66; }
+#capture-save-form { border-top-color: #cbd4e375; }
+.capture-toolbar > span, .capture-foot { color: #697487; }
+.capture-content kbd { background: #ffffff63; border-color: #ffffffbf; color: #697487; }
+.preview-heading { color: #4e596b; }
+.preview-heading > span:last-child { color: #798496; }
+dialog { background: #f9faffed; border-color: #ffffffb3; }
+/* Keep text fully opaque. Honor system contrast/transparency preferences. */
+:root[data-material='opaque'] { background: #eef0f6; }
+:root[data-material='opaque'] .sidebar { background: #eceff5; backdrop-filter: none; }
+:root[data-material='opaque'] #workspace { background: #f9faff; }
+:root[data-material='opaque'] .capture-content { background: #f4f6fb; }
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  :root { background: #f5f5f7; }
+  .sidebar, .capture-content { background: #f1f2f6; backdrop-filter: none; }
+  #workspace { background: #fff; }
+  .task-panel, .stats article, .settings-card, .connection-card { background: #fff; }
+}

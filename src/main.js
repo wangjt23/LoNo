@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, Notification, powerMonitor, safeStorage, dialog, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, Notification, powerMonitor, safeStorage, dialog, screen, nativeTheme } from 'electron';
+import { release } from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -26,8 +27,19 @@ else {
   app.whenReady().then(start).catch(error => { dialog.showErrorBox('拾光提醒启动失败', `未能加载本地数据，请保留数据目录并重试。\n${error.message}`); app.quit(); });
 }
 
+const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621;
+function windowMaterial() {
+  if (nativeTheme.prefersReducedTransparency || nativeTheme.shouldUseHighContrastColors) return 'opaque';
+  return supportsAcrylic ? 'acrylic' : process.platform === 'darwin' ? 'vibrancy' : 'opaque';
+}
+function applyMaterial(win) {
+  const material = windowMaterial();
+  win.setBackgroundColor(material === 'opaque' ? '#f5f5f7' : '#00000000');
+  if (supportsAcrylic) win.setBackgroundMaterial(material === 'acrylic' ? 'acrylic' : 'none');
+  if (process.platform === 'darwin') win.setVibrancy(material === 'vibrancy' ? 'under-window' : null);
+}
 function windowOptions(extra = {}) {
-  return { backgroundColor: '#f6f8fb', icon: trayIcon(), webPreferences: { preload: path.join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, additionalArguments: smoke ? ['--smoke'] : [] }, ...extra };
+  return { backgroundColor: '#00000000', icon: trayIcon(), webPreferences: { preload: path.join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, additionalArguments: smoke ? ['--smoke'] : [] }, ...extra };
 }
 function secureWindow(win) {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -51,15 +63,18 @@ function capture() {
 function broadcast() { for (const win of [mainWindow, captureWindow]) if (win && !win.isDestroyed()) win.webContents.send('changed'); }
 function snapshot() {
   return { tasks: store.tasks(), records: store.records(), settings: config.public(), sync: syncStatus,
-    runtime: { shortcutOK, shortcut: 'Ctrl+Shift+Space', startupWarning, notificationWarning, dataPath: app.getPath('userData'), version: app.getVersion() } };
+    runtime: { shortcutOK, shortcut: 'Ctrl+Shift+Space', startupWarning, notificationWarning, material: windowMaterial(), dataPath: app.getPath('userData'), version: app.getVersion() } };
 }
 async function start() {
+  nativeTheme.themeSource = 'light';
   store = await Store.open(path.join(app.getPath('userData'), 'reminders.sqlite'));
   config = new Config(path.join(app.getPath('userData'), 'settings.json'), safeStorage);
   try { await config.load(); } catch { startupWarning = '设置或系统密钥无法读取，本次使用离线模式；原设置文件已保留。请先备份，再重新配置。'; }
   mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: '拾光提醒 · Shiguang', show: false }));
   captureWindow = new BrowserWindow(windowOptions({ width: 680, height: 340, title: '快速记录 · 拾光提醒', frame: false, hasShadow: true, roundedCorners: true, backgroundColor: '#f7f7f9', alwaysOnTop: true, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, show: false }));
   for (const win of [mainWindow, captureWindow]) { secureWindow(win); win.setMenuBarVisibility(false); }
+  for (const win of [mainWindow, captureWindow]) applyMaterial(win);
+  nativeTheme.on('updated', () => { for (const win of [mainWindow, captureWindow]) if (!win.isDestroyed()) applyMaterial(win); broadcast(); });
   mainWindow.on('close', event => { if (!quitting && tray) { event.preventDefault(); mainWindow.hide(); } });
   captureWindow.on('close', event => { if (!quitting) { event.preventDefault(); captureWindow.hide(); } });
   registerIPC();

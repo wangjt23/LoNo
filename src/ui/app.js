@@ -28,6 +28,7 @@ const titles = { all: ['提醒总览', '让每一件重要的事，都有着落�
 
 async function refresh() {
   data = await api.invoke('snapshot');
+  document.documentElement.dataset.material = data.runtime.material || 'opaque';
   if (isCapture && $('#capture-mode-note')) $('#capture-mode-note').textContent = modelNotice();
   if (!isCapture) {
     if (!$('#workspace')) shell();
