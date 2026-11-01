@@ -26,6 +26,15 @@ npm run test:desktop
 npm run dist:win
 ```
 
+打包程序也可使用同一套桌面测试：
+
+```powershell
+$env:SHIGUANG_EXECUTABLE = (Resolve-Path 'release/win-unpacked/Shiguang Reminder.exe').Path
+npm run test:desktop
+```
+
+当前验收结果与待验证边界见 [VALIDATION.md](VALIDATION.md)。
+
 Electron 首次运行可能下载运行时，打包时会下载 NSIS 工具。请确保可访问 npm 和 GitHub Releases。Electron binary 的版本和 SHA-256 由其 npm 包校验。运行环境未提供 npm 时可从 Node.js 官方发行版安装完整工具链。
 
 ```text

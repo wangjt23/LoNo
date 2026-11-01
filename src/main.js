@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, Notification, powerMonitor, safeStorage, dialog, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, Notification, powerMonitor, safeStorage, dialog, screen } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +7,7 @@ import { analyze } from './core/analyzer.js';
 import { Store } from './core/store.js';
 import { Config } from './core/config.js';
 import { pollMail, pollBridge, bridgeSchema, identity } from './core/connectors.js';
+import { trayIcon } from './icon.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const smoke = process.argv.includes('--smoke');
@@ -26,7 +27,7 @@ else {
 }
 
 function windowOptions(extra = {}) {
-  return { backgroundColor: '#f6f8fb', webPreferences: { preload: path.join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, additionalArguments: smoke ? ['--smoke'] : [] }, ...extra };
+  return { backgroundColor: '#f6f8fb', icon: trayIcon(), webPreferences: { preload: path.join(root, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, additionalArguments: smoke ? ['--smoke'] : [] }, ...extra };
 }
 function secureWindow(win) {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -58,8 +59,7 @@ async function start() {
   await mainWindow.loadFile(path.join(root, 'ui/index.html'));
   await captureWindow.loadFile(path.join(root, 'ui/index.html'), { query: { capture: '1' } });
   mainWindow.show();
-  const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIElEQVQ4T2NkYPj/n4ECwESJ5lEDRg0YNWDUgFEDBoMBAMkYH/Gr7c/6AAAAAElFTkSuQmCC');
-  tray = new Tray(icon); tray.setToolTip('拾光提醒 · Ctrl+Shift+Space 快速记录');
+  tray = new Tray(trayIcon()); tray.setToolTip('拾光提醒 · Ctrl+Shift+Space 快速记录');
   tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开拾光提醒', click: showMain }, { label: '快速记录', click: capture }, { type: 'separator' }, { label: '退出（停止提醒）', click: () => { quitting = true; app.quit(); } }]));
   tray.on('double-click', showMain);
   shortcutOK = globalShortcut.register('CommandOrControl+Shift+Space', capture);
@@ -83,6 +83,11 @@ function registerIPC() {
     if (previews.size > 100) previews.delete(previews.keys().next().value);
     const analysis = await analyze(text, { manual: true, model: config.value.model });
     const token = randomUUID(); previews.set(token, { text: text.trim(), analysis, expires: Date.now() + 30 * 60000 });
+    if (captureWindow.isVisible()) {
+      const area = screen.getDisplayMatching(captureWindow.getBounds()).workArea;
+      const height = Math.min(800, area.height - 50);
+      captureWindow.setBounds({ x: Math.round(area.x + (area.width - 650) / 2), y: Math.round(area.y + (area.height - height) / 2), width: 650, height });
+    }
     return { token, ...analysis };
   });
   handle('save-capture', ({ token, fields }) => {
@@ -95,9 +100,15 @@ function registerIPC() {
   handle('save-settings', async input => {
     if (syncing) throw new Error('正在同步，请等待完成后再保存设置');
     if (startupWarning.includes('设置或系统密钥无法读取')) throw new Error('原设置文件无法解密，请先备份数据目录中的 settings.json 并移走，再重启配置');
-    // Apply OS integration before committing settings; on failure settings remain unchanged.
-    if (input.launchAtLogin !== config.value.launchAtLogin) app.setLoginItemSettings({ openAtLogin: Boolean(input.launchAtLogin) });
-    const result = await config.save(input); resetPolling(); broadcast(); return result;
+    const previous = structuredClone(config.value);
+    const result = await config.save(input);
+    try {
+      if (input.launchAtLogin !== previous.launchAtLogin) app.setLoginItemSettings({ openAtLogin: Boolean(input.launchAtLogin), path: process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe') });
+    } catch {
+      await config.save(previous);
+      throw new Error('未能更新系统登录启动项，设置已还原');
+    }
+    resetPolling(); broadcast(); return result;
   });
   handle('sync', async () => { await syncAll(); return syncStatus; });
   handle('capture', () => capture());
@@ -126,6 +137,7 @@ function registerIPC() {
   if (smoke) handle('smoke', async command => {
     if (command === 'capture') capture();
     if (command === 'due') { const tasks = store.tasks().filter(t => t.status === 'pending'); if (tasks[0]) { store.db.run('UPDATE tasks SET remind_at=?, notified_at=NULL WHERE id=?', [new Date(Date.now() - 1000).toISOString(), tasks[0].id]); store.persist(); await checkDue(); } return snapshot(); }
+    if (command === 'check') await checkDue();
     return snapshot();
   });
 }

@@ -28,7 +28,7 @@
     "appId": "com.shiguang.reminder",
     "productName": "Shiguang Reminder",
     "directories": { "output": "release" },
-    "files": ["src/**/*", "package.json"],
+    "files": ["src/**/*", "package.json", "!node_modules/sql.js/dist/{sql-asm*,worker*,*debug*,*inline*,*browser*,*.zip}"],
     "asar": true,
     "win": { "target": "portable", "signAndEditExecutable": false },
     "portable": { "artifactName": "Shiguang-Reminder-${version}-win-x64.exe" },

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { analyze, analyzeLocal, parseDate, validateEndpoint } from '../src/core/analyzer.js';
 import { Store } from '../src/core/store.js';
 import { pollBridge, pollMail } from '../src/core/connectors.js';
+import { Config } from '../src/core/config.js';
 
 const now = new Date(2026, 10, 2, 10, 0); // Monday, desktop local time
 test('Chinese dates, weekdays, AM/PM, lead time, invalid dates', () => {
@@ -25,6 +26,31 @@ test('missing date and noise are not scheduled', () => {
   assert.equal(analyzeLocal('广告促销，请点击链接', now).shouldRemind, false);
   assert.equal(analyzeLocal('仅供参考，无需回复', now).shouldRemind, false);
   assert.equal(analyzeLocal('紧急！今天提交材料', now).priority, 'high');
+  assert.equal(analyzeLocal('材料已经提交，无需处理', now).shouldRemind, false);
+});
+test('timezone offsets are normalized before SQLite comparisons', async () => {
+  const store = await Store.open();
+  try {
+    const a = analyzeLocal('请提交', now, true);
+    store.ingest({ text: '请提交' }, a, { ...a, dueAt: '2026-11-02T16:00:00+08:00', remindAt: '2026-11-02T15:00:00+08:00' });
+    assert.equal(store.due(new Date('2026-11-02T07:01:00Z')).length, 1);
+    assert.equal(store.tasks()[0].remind_at, '2026-11-02T07:00:00.000Z');
+  } finally { store.close(); }
+});
+test('settings retain existing secrets, reject invalid config and fail closed without encryption', async () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'reminder-config-'));
+  const safe = { isAsyncEncryptionAvailable: async () => true, encryptStringAsync: async s => Buffer.from(s.split('').reverse().join('')), decryptStringAsync: async b => ({ result: b.toString().split('').reverse().join('') }) };
+  const c = new Config(path.join(dir, 'settings.json'), safe);
+  try {
+    const input = c.public(); input.model.apiKey = 'secret'; await c.save(input);
+    assert.equal(c.public().model.apiKey, ''); assert.equal(c.public().model.hasApiKey, true);
+    await c.save(c.public()); assert.equal(c.value.model.apiKey, 'secret');
+    const reloaded = new Config(c.filename, safe); await reloaded.load(); assert.equal(reloaded.value.model.apiKey, 'secret');
+    const invalid = c.public(); invalid.pollMinutes = 0; await assert.rejects(c.save(invalid)); assert.equal(c.value.pollMinutes, 5);
+    safe.isAsyncEncryptionAvailable = async () => false;
+    await assert.rejects(c.save(c.public()), /加密不可用/);
+    const cleared = c.public(); cleared.model.clearSecret = true; await c.save(cleared); assert.equal(c.value.model.apiKey, '');
+  } finally { rmSync(dir, { recursive: true }); }
 });
 test('model failure and malformed output fall back with a visible warning', async () => {
   const result = await analyze('明天开会', { now, model: { enabled: true, endpoint: 'http://localhost:8080' }, fetchImpl: async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"shouldRemind":true}' } }] })) });
