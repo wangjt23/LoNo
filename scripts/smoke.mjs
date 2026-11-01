@@ -18,7 +18,7 @@ async function mainPage(app) {
   }
   throw new Error('Main workspace did not load');
 }
-let bridgeCalls = 0, modelCalls = 0;
+let bridgeCalls = 0, modelCalls = 0, modelDelay = 0;
 const server = http.createServer((req, res) => {
   res.setHeader('Content-Type', 'application/json');
   if (req.url.startsWith('/messages')) {
@@ -29,7 +29,7 @@ const server = http.createServer((req, res) => {
     let body = ''; req.on('data', chunk => body += chunk); req.on('end', () => {
       assert.ok(JSON.parse(body).messages[1].content.includes('提交'));
       const due = new Date(Date.now() + 86400000).toISOString();
-      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ shouldRemind: true, title: '提交桥接测试材料', dueAt: due, remindAt: due, priority: 'high', confidence: 0.95, reason: '模拟模型识别到明确行动与截止日期。' }) } }] }));
+      setTimeout(() => res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ shouldRemind: true, title: '提交桥接测试材料', dueAt: due, remindAt: due, priority: 'high', confidence: 0.95, reason: '模拟模型识别到明确行动与截止日期。' }) } }] })), modelDelay);
     });
   }
 });
@@ -58,6 +58,11 @@ try {
   await main.locator('.task-check').click();
   await main.locator('[data-view="done"]').click();
   await main.locator('.task-row.completed').waitFor();
+  await main.locator('.task-title').click();
+  await main.locator('#edit-form [name="title"]').fill('已完成任务的标题修正');
+  await main.locator('#edit-form button[type="submit"]').click();
+  await main.locator('.task-row.completed').waitFor();
+  assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks[0].status, 'done');
   await main.locator('.task-check').click();
   await main.locator('[data-view="all"]').click();
   await main.locator('.task-title').click();
@@ -74,13 +79,23 @@ try {
   await main.locator('[name="model.apiKey"]').fill('model-test-secret');
   await main.locator('#settings-form button[type="submit"]').click();
   await main.getByText('设置已安全保存', { exact: true }).waitFor();
+  await capture.getByText('已启用模型 · 内容将发送到配置的模型服务', { exact: true }).waitFor();
+  modelDelay = 250;
+  await capture.locator('#capture-text').fill('明天提交旧内容');
+  await capture.locator('#analyze-button').click();
+  await capture.locator('#capture-text').fill('后天提交新内容');
+  await capture.getByText('输入已修改，请重新分析', { exact: true }).waitFor();
+  assert.equal(await capture.locator('#capture-save-form').count(), 0, 'stale analysis cannot be saved for edited input');
+  assert.equal(await capture.locator('#capture-text').inputValue(), '后天提交新内容');
+  modelDelay = 0;
+  const modelCallsBeforeBridge = modelCalls;
   assert.ok(!readFileSync(path.join(dir, 'settings.json'), 'utf8').includes('test-secret'), 'secrets must be encrypted');
   await main.locator('[data-view="sources"]').click();
   await main.locator('[data-action="sync"]').click();
   await main.getByText('新增 1 条记录', { exact: true }).waitFor();
   await main.locator('[data-action="sync"]').click();
   await main.getByText('新增 0 条记录', { exact: true }).waitFor();
-  assert.equal(bridgeCalls, 2); assert.equal(modelCalls, 1, 'duplicate sources do not call Agent again');
+  assert.equal(bridgeCalls, 2); assert.equal(modelCalls - modelCallsBeforeBridge, 1, 'duplicate sources do not call Agent again');
   await main.screenshot({ path: path.join(artifacts, '03-sources.png') });
   await main.locator('[data-view="all"]').click();
   assert.equal(await main.locator('.task-row').count(), 2);
@@ -96,7 +111,9 @@ try {
   await main.locator('[data-action="export"]').click();
   await main.getByText('记录已导出（不包含连接密钥）', { exact: true }).waitFor();
   assert.equal(JSON.parse(readFileSync(exportFile, 'utf8')).records.length, 2);
-  await app.evaluate(({ globalShortcut }) => { if (!globalShortcut.isRegistered('CommandOrControl+Shift+Space')) throw new Error('shortcut was not registered'); });
+  const registered = await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('CommandOrControl+Shift+Space'));
+  assert.equal(snapshot.runtime.shortcutOK, registered);
+  if (!registered) assert.ok(snapshot.runtime.startupWarning.includes('快捷键被其他程序占用'), 'shortcut conflicts are reported; tray/UI capture still works');
   await app.close(); app = undefined;
   assert.ok(existsSync(path.join(dir, 'reminders.sqlite')));
   app = await launch();
@@ -105,7 +122,7 @@ try {
   assert.equal(await restarted.locator('.task-row').count(), 2, 'records survive restart');
   const restored = await restarted.evaluate(() => window.reminder.invoke('snapshot'));
   assert.equal(restored.settings.model.hasApiKey, true, 'OS encrypted credentials decrypt on restart');
-  assert.equal(restored.runtime.startupWarning, '');
+  assert.ok(!restored.runtime.startupWarning.includes('设置或系统密钥无法读取'), 'encrypted settings load on restart even when another app owns the shortcut');
   // Stub only OS notification delivery: exercise the real scheduler and SQLite state.
   await app.evaluate(({ Notification }) => {
     globalThis.testNotificationCalls = 0;
@@ -118,6 +135,16 @@ try {
   assert.ok(delivered.tasks.some(t => t.notified_at), 'successful notification persisted');
   await restarted.evaluate(() => window.reminder.invoke('smoke', 'check'));
   assert.equal(await app.evaluate(() => globalThis.testNotificationCalls), 2, 'failed delivery retries; successful delivery does not repeat');
+  // An old visible notification must not suppress a newer schedule or acknowledge it late.
+  await app.evaluate(({ Notification }) => { globalThis.oldNotification = null; Notification.prototype.show = function () { globalThis.testNotificationCalls++; globalThis.oldNotification = this; }; });
+  await restarted.evaluate(() => window.reminder.invoke('smoke', 'due'));
+  const oldTask = (await restarted.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.status === 'pending' && Date.parse(t.remind_at) < Date.now() && !t.notified_at);
+  await restarted.evaluate(id => window.reminder.invoke('update-task', { id, action: 'snooze' }), oldTask.id);
+  await app.evaluate(() => globalThis.oldNotification.emit('show'));
+  assert.equal((await restarted.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === oldTask.id).notified_at, null);
+  const countBeforeNewSchedule = await app.evaluate(() => globalThis.testNotificationCalls);
+  await restarted.evaluate(() => window.reminder.invoke('smoke', 'due'));
+  assert.equal(await app.evaluate(() => globalThis.testNotificationCalls), countBeforeNewSchedule + 1, 'old visible notification does not block a snoozed schedule');
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ status: 'passed', assertions: 'capture, Chinese dates, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut registration, restart, notification failure/retry/deduplication', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
 } finally { if (app) await app.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

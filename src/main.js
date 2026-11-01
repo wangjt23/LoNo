@@ -178,13 +178,20 @@ async function syncAll() {
   } finally { syncing = false; broadcast(); await checkDue(); }
 }
 
-function sendNotification(title, body, persist = true, taskId) {
+function sendNotification(title, body, persist = true, taskId, revision) {
   const n = new Notification({ title, body, silent: false }); notifications.add(n);
+  n.taskKey = taskId ? `${taskId}:${revision}` : null;
   n.on('click', showMain);
-  n.once('show', () => { if (persist && taskId) { store.notified(taskId); broadcast(); } notificationWarning = ''; });
+  n.once('show', () => {
+    try {
+      if (persist && taskId) store.notified(taskId, new Date(), revision);
+      notificationWarning = '';
+    } catch { notificationWarning = '通知已显示，但状态保存失败，请检查磁盘空间；任务保留待重试。'; }
+    broadcast();
+  });
   n.once('failed', () => { notificationWarning = '系统通知发送失败，提醒仍保留在列表中；请检查 Windows 通知权限。'; notifications.delete(n); broadcast(); });
   n.once('close', () => notifications.delete(n));
-  n.show();
+  try { n.show(); } catch { notifications.delete(n); notificationWarning = '系统通知发送失败，提醒保留待重试。'; broadcast(); }
   return n;
 }
 async function checkDue() {
@@ -192,13 +199,13 @@ async function checkDue() {
   notificationBusy = true;
   try {
     if (!Notification.isSupported()) { notificationWarning = '当前系统不支持桌面通知，请在列表查看到期事项。'; return; }
-    const active = new Set([...notifications].map(n => n.taskId).filter(Boolean));
+    const active = new Set([...notifications].map(n => n.taskKey).filter(Boolean));
     for (const task of store.due()) {
-      if (active.has(task.id)) continue;
-      const n = sendNotification(`${task.priority === 'high' ? '重要 · ' : ''}${task.title}`, '提醒时间已到，点击打开拾光提醒。', true, task.id);
-      n.taskId = task.id;
+      if (active.has(`${task.id}:${task.revision}`)) continue;
+      sendNotification(`${task.priority === 'high' ? '重要 · ' : ''}${task.title}`, '提醒时间已到，点击打开拾光提醒。', true, task.id, task.revision);
     }
-  } finally { notificationBusy = false; }
+  } catch { notificationWarning = '检查提醒时出现错误，请检查本地数据和磁盘空间。'; broadcast(); }
+  finally { notificationBusy = false; }
 }
 app.on('activate', showMain);
 app.on('window-all-closed', () => { if (!tray) app.quit(); });

@@ -4,7 +4,7 @@ Windows 优先、可迁移 macOS/Linux 的本地智能提醒应用。详细设�
 
 ## 使用
 
-双击 `release/Shiguang-Reminder-0.1.0-win-x64.exe`。这是便携版，不需要安装；第一次启动后请固定放在一个位置。
+当前修复版为 `release/Shiguang-Reminder-0.1.1-win-x64.exe`。这是便携版，不需要安装；第一次启动后请固定放在一个位置。更新时先通过托盘退出旧版，再打开新版；使用相同数据目录并自动迁移已有记录。本次构建在当前机器受到 Device Guard 启动策略拦截，运行验收边界见 [REVIEW.md](REVIEW.md)。
 
 1. 点击「快速记录」，或按 **Ctrl + Shift + Space** 唤起置顶输入窗口。
 2. 输入「明天下午三点提醒我提交材料，提前半小时提醒」，点击分析。

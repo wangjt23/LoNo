@@ -1,6 +1,6 @@
 {
   "name": "shiguang-reminder",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "本地优先的智能工作提醒助手",
   "author": "Shiguang contributors",
   "private": true,
@@ -27,12 +27,27 @@
   "build": {
     "appId": "com.shiguang.reminder",
     "productName": "Shiguang Reminder",
-    "directories": { "output": "release" },
-    "files": ["src/**/*", "package.json", "!node_modules/sql.js/dist/{sql-asm*,worker*,*debug*,*inline*,*browser*,*.zip}"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!node_modules/sql.js/dist/{sql-asm*,worker*,*debug*,*inline*,*browser*,*.zip}"
+    ],
     "asar": true,
-    "win": { "target": "portable", "signAndEditExecutable": false },
-    "portable": { "artifactName": "Shiguang-Reminder-${version}-win-x64.exe" },
-    "mac": { "target": "dmg" },
-    "linux": { "target": "AppImage" }
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "Shiguang-Reminder-${version}-win-x64.exe"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }

@@ -3,7 +3,7 @@ const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const labels = { manual: '快捷记录', email: '邮件', wecom: '企业微信', high: '重要', medium: '普通', low: '低优先级', pending: '进行中', review: '待确认', done: '已完成' };
 const isCapture = new URLSearchParams(location.search).has('capture');
-let data, view = 'all', query = '', preview = null, editing = null, busy = false;
+let data, view = 'all', query = '', preview = null, editing = null, busy = false, captureRevision = 0;
 const icons = {
   grid: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
@@ -23,10 +23,12 @@ function iso(value) { return value ? new Date(value).toISOString() : null; }
 function toast(text, error = false) { $('#toast').textContent = text; $('#toast').className = `visible ${error ? 'error' : ''}`; clearTimeout(toast.timer); toast.timer = setTimeout(() => $('#toast').className = '', 4500); }
 function overdue(t) { return t.status !== 'done' && t.due_at && Date.parse(t.due_at) < Date.now(); }
 function today(t) { return t.remind_at && new Date(t.remind_at).toDateString() === new Date().toDateString(); }
+function modelNotice() { return data?.settings.model.enabled ? '已启用模型 · 内容将发送到配置的模型服务' : '离线分析 · 输入内容不会发送到模型服务'; }
 const titles = { all: ['提醒总览', '让每一件重要的事，都有着落。'], today: ['今日安排', '专注今天，也照顾那些尚未完成的事。'], review: ['待确认', '补充时间或核对分析，让提醒更准确。'], done: ['已完成', '每一次完成，都值得被记住。'], sources: ['信息来源', '把分散的信息，汇聚到同一个地方。'], settings: ['偏好设置', '按你的工作方式，连接信息与智能。'] };
 
 async function refresh() {
   data = await api.invoke('snapshot');
+  if (isCapture && $('#capture-mode-note')) $('#capture-mode-note').textContent = modelNotice();
   if (!isCapture) {
     if (!$('#workspace')) shell();
     updateNav();
@@ -34,7 +36,7 @@ async function refresh() {
   }
 }
 function shell() {
-  $('#app').innerHTML = `<aside class="sidebar"><div class="brand"><div class="brand-mark">拾</div><div>拾光提醒<small>SHIGUANG</small></div></div><button class="primary new-button" data-action="capture">${icon('plus')} 快速记录 <kbd>⇧ Space</kbd></button><div class="nav-caption">工作空间</div><nav>${[['all', 'grid', '提醒总览'], ['today', 'sun', '今日安排'], ['review', 'clock', '待确认'], ['done', 'check', '已完成']].map(([id, i, name]) => `<button data-view="${id}">${icon(i)}<span>${name}</span><b id="count-${id}"></b></button>`).join('')}</nav><div class="nav-caption second">连接与偏好</div><nav><button data-view="sources">${icon('inbox')}<span>信息来源</span></button><button data-view="settings">${icon('settings')}<span>偏好设置</span></button></nav><div class="sidebar-footer"><span class="status-dot"></span> 本地优先 · 数据留在此设备<small>关闭窗口后在托盘继续运行</small></div></aside><main id="workspace"><header class="topbar"><div class="breadcrumb">我的工作空间 <span>/</span> <b id="crumb"></b></div><span class="today-date">${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</span></header><div id="content"></div></main><dialog id="editor"></dialog>`;
+  $('#app').innerHTML = `<aside class="sidebar"><div class="brand"><div class="brand-mark">拾</div><div>拾光提醒<small>SHIGUANG</small></div></div><button class="primary new-button" data-action="capture">${icon('plus')} 快速记录 <kbd>⇧ Space</kbd></button><div class="nav-caption">工作空间</div><nav>${[['all', 'grid', '提醒总览'], ['today', 'sun', '今日安排'], ['review', 'clock', '待确认'], ['done', 'check', '已完成']].map(([id, i, name]) => `<button data-view="${id}">${icon(i)}<span>${name}</span><b id="count-${id}"></b></button>`).join('')}</nav><div class="nav-caption second">连接与偏好</div><nav><button data-view="sources">${icon('inbox')}<span>信息来源</span></button><button data-view="settings">${icon('settings')}<span>偏好设置</span></button></nav><div class="sidebar-footer"><span class="status-dot"></span> 本地存储 · 记录保存在此设备<small>关闭窗口后在托盘继续运行</small></div></aside><main id="workspace"><header class="topbar"><div class="breadcrumb">我的工作空间 <span>/</span> <b id="crumb"></b></div><span class="today-date">${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</span></header><div id="content"></div></main><dialog id="editor"></dialog>`;
 }
 function updateNav() {
   const active = data.tasks.filter(t => t.status !== 'done');
@@ -76,7 +78,7 @@ function renderSettings() {
   $('#view-content').innerHTML = `<form id="settings-form"><section class="settings-card"><div class="section-label">01 / 智能分析</div><h2>接入你的模型或 Agent 网关</h2><p>启用后，输入内容和采集到的正文会发送至你配置的服务。关闭时使用本地中文规则。</p>${toggle('model.enabled', s.model.enabled, '启用模型分析', '兼容 chat/completions JSON 响应；不执行模型返回的工具调用')}<div class="form-grid">${field('完整接口地址', 'model.endpoint', s.model.endpoint, 'url', '例如 https://your-gateway/v1/chat/completions')}${field('模型名称', 'model.model', s.model.model)}${field('API Key', 'model.apiKey', '', 'password', s.model.hasApiKey ? '已加密保存；留空保留原密钥' : '仅使用系统加密保存')}${toggle('model.clearSecret', false, '清除已保存的 API Key', '保存设置后生效')}</div></section><section class="settings-card"><div class="section-label">02 / 邮件采集</div><h2>让邮件里的待办，自动出现</h2><p>使用邮箱 IMAP 授权码。只读采集，不更改邮件已读状态；首次读取近 7 天最多 50 封。</p>${toggle('mail.enabled', s.mail.enabled, '定期同步邮件', '仅支持 TLS 直连（通常为端口 993）')}<div class="form-grid">${field('IMAP 服务器', 'mail.host', s.mail.host, 'text', '例如 imap.qq.com')}${field('TLS 端口', 'mail.port', s.mail.port, 'number')}${field('邮箱账号', 'mail.user', s.mail.user)}${field('授权码 / 密码', 'mail.password', '', 'password', s.mail.hasPassword ? '已加密保存；留空保留' : '从邮箱设置中开启 IMAP 并生成授权码')}${field('文件夹', 'mail.mailbox', s.mail.mailbox)}${toggle('mail.clearSecret', false, '清除邮箱授权码', '同时关闭邮件同步后再清除')}</div></section><section class="settings-card"><div class="section-label">03 / 企业微信</div><h2>连接已授权的数据桥接</h2><p>由企业会话存档服务或 n8n 提供 GET JSON 接口；返回 messages 数组及可选 nextCursor。详见项目 README。</p>${toggle('bridge.enabled', s.bridge.enabled, '定期读取桥接', '请求携带 Bearer Token；仅允许 HTTPS 或本机 HTTP')}<div class="form-grid">${field('桥接接口地址', 'bridge.endpoint', s.bridge.endpoint, 'url')}${field('Bridge Token', 'bridge.token', '', 'password', s.bridge.hasToken ? '已加密保存；留空保留' : '可选，取决于桥接服务鉴权方式')}${toggle('bridge.clearSecret', false, '清除 Bridge Token', '保存设置后生效')}</div></section><section class="settings-card"><div class="section-label">04 / 桌面与数据</div><h2>适合你的工作节奏</h2><div class="form-grid">${field('采集间隔（分钟，1–1440）', 'pollMinutes', s.pollMinutes, 'number')}${toggle('launchAtLogin', s.launchAtLogin, '登录 Windows 后启动', '仅安装/固定存放应用后启用，移动文件可能导致失效')}</div><div class="settings-facts"><p>快速记录快捷键 <kbd>Ctrl + Shift + Space</kbd> <span>${data.runtime.shortcutOK ? '已注册' : '被占用，可使用托盘'}</span></p><p>数据位置 <code>${esc(data.runtime.dataPath)}</code></p><p>记录保存在本地 SQLite，凭据使用系统密钥加密。退出应用或电脑关机时无法提醒，重新启动时会检查错过的提醒。</p></div><div class="button-row"><button type="button" class="secondary" data-action="test-notification">测试桌面通知</button><button type="button" class="secondary" data-action="export">导出记录</button></div></section><div class="settings-save"><span id="settings-result">设置仅保存在此设备</span><button type="submit" class="primary">保存设置</button></div></form>`;
 }
 function captureMarkup() {
-  return `<section class="capture-content"><div class="capture-head"><span class="mini-brand">拾</span><span>随手记，安心做</span><button class="close-button" data-action="close" aria-label="关闭">×</button></div><h2>有什么事，需要记住？</h2><p>写下任务和时间，拾光帮你整理。</p><textarea id="capture-text" placeholder="明天下午三点提醒我提交项目材料，提前半小时提醒…" maxlength="30000" rows="4" autofocus></textarea><div class="capture-toolbar"><span>中文日期 · 本地优先</span><button class="primary" id="analyze-button" data-action="analyze">分析并预览 ${icon('arrow')}</button></div><div id="capture-result"></div><div class="capture-foot">${data?.settings.model.enabled ? '已启用模型 · 内容将发送到配置的模型服务' : '离线分析 · 输入内容不会发送到模型服务'}<span>Esc 关闭</span></div></section>`;
+  return `<section class="capture-content"><div class="capture-head"><span class="mini-brand">拾</span><span>随手记，安心做</span><button class="close-button" data-action="close" aria-label="关闭">×</button></div><h2>有什么事，需要记住？</h2><p>写下任务和时间，拾光帮你整理。</p><textarea id="capture-text" placeholder="明天下午三点提醒我提交项目材料，提前半小时提醒…" maxlength="30000" rows="4" autofocus></textarea><div class="capture-toolbar"><span>中文日期 · 本地优先</span><button class="primary" id="analyze-button" data-action="analyze">分析并预览 ${icon('arrow')}</button></div><div id="capture-result"></div><div class="capture-foot"><span id="capture-mode-note">${modelNotice()}</span><span>Esc 关闭</span></div></section>`;
 }
 function fieldsMarkup(fields) {
   return `<div class="form-grid task-fields">${field('事项标题', 'title', fields.title)}<label class="field"><span>重要程度</span><select name="priority">${['high', 'medium', 'low'].map(p => `<option value="${p}" ${fields.priority === p ? 'selected' : ''}>${labels[p]}</option>`).join('')}</select></label>${field('截止时间', 'dueAt', inputDate(fields.dueAt), 'datetime-local')}${field('提醒时间', 'remindAt', inputDate(fields.remindAt), 'datetime-local')}</div>`;
@@ -107,8 +109,12 @@ document.addEventListener('click', async event => {
     if (action === 'snooze-current') { await api.invoke('update-task', { id: editing.id, action: 'snooze' }); $('#editor').close(); toast('将在 15 分钟后再次提醒'); }
     if (action === 'analyze') {
       if (busy) return; busy = true; button.disabled = true; button.textContent = '正在分析…';
+      const revision = captureRevision;
+      preview = null; $('#capture-result').innerHTML = '';
       try {
-        preview = await api.invoke('analyze', $('#capture-text').value);
+        const result = await api.invoke('analyze', $('#capture-text').value);
+        if (revision !== captureRevision) { toast('输入已修改，请重新分析'); return; }
+        preview = result;
         $('#capture-result').innerHTML = `<form id="capture-save-form">${fieldsMarkup(preview)}<div class="analysis-note"><strong>${preview.engine === 'model' ? '模型建议' : '本地分析'}</strong><p>${esc(preview.reason)}</p>${preview.warning ? `<p class="warning">${esc(preview.warning)}</p>` : ''}</div><button type="submit" class="primary full">${preview.remindAt ? '确认并创建提醒' : '保存为待确认事项'}</button></form>`;
       } finally { busy = false; button.disabled = false; button.innerHTML = `重新分析 ${icon('arrow')}`; }
     }
@@ -120,7 +126,7 @@ document.addEventListener('click', async event => {
 });
 document.addEventListener('input', event => {
   if (event.target.id === 'search') { query = event.target.value; renderTaskList(); }
-  if (event.target.id === 'capture-text' && preview) { preview = null; $('#capture-result').innerHTML = ''; }
+  if (event.target.id === 'capture-text') { captureRevision++; preview = null; $('#capture-result').innerHTML = ''; }
 });
 document.addEventListener('submit', async event => {
   event.preventDefault(); const form = event.target; const button = form.querySelector('button[type="submit"]');
@@ -129,6 +135,7 @@ document.addEventListener('submit', async event => {
     if (button) button.disabled = true;
     if (form.id === 'capture-save-form') {
       if (!preview) throw new Error('请先分析输入内容');
+      $('#capture-text').disabled = true; $('#analyze-button').disabled = true;
       await api.invoke('save-capture', { token: preview.token, fields: getTaskFields(form) });
       preview = null; $('#app').innerHTML = captureMarkup(); toast('已保存，拾光替你记住了'); $('#capture-text').focus();
     }
@@ -144,7 +151,10 @@ document.addEventListener('submit', async event => {
       await api.invoke('save-settings', input); toast('设置已安全保存'); data = await api.invoke('snapshot'); renderSettings();
     }
   } catch (error) { toast(error.message, true); }
-  finally { if (button) button.disabled = false; }
+  finally {
+    if (button) button.disabled = false;
+    if (form.id === 'capture-save-form') { $('#capture-text').disabled = false; $('#analyze-button').disabled = false; }
+  }
 });
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && isCapture) api.invoke('hide-capture'); });
 api.onChange(() => refresh().catch(e => toast(e.message, true)));

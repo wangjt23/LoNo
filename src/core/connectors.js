@@ -34,7 +34,7 @@ export async function pollMail(config, state = {}, consume, Client = ImapFlow) {
     const mailbox = await client.mailboxOpen(config.mailbox || 'INBOX', { readOnly: true });
     const validity = String(mailbox.uidValidity);
     const same = state.validity === validity;
-    const uids = await client.search(same && state.uid ? { uid: `${state.uid + 1}:*` } : { since: new Date(Date.now() - 7 * 86400000) }, { uid: true });
+    const uids = await client.search(same ? { uid: `${(state.uid || 0) + 1}:*` } : { since: new Date(Date.now() - 7 * 86400000) }, { uid: true });
     const ids = (uids || []).filter(uid => !same || uid > (state.uid || 0)).sort((a, b) => a - b);
     // First run caps the historical import, later runs drain incrementally.
     const batch = same ? ids.slice(0, 50) : ids.slice(-50);
@@ -51,6 +51,7 @@ export async function pollMail(config, state = {}, consume, Client = ImapFlow) {
         checkpoint = uid;
       }
     }
+    if (!same && !batch.length) checkpoint = Math.max(0, Number(mailbox.uidNext || 1) - 1);
     return { validity, uid: checkpoint, count: batch.length, remaining: Math.max(0, ids.length - batch.length) };
   } finally { try { await client.logout(); } catch { client.close(); } }
 }
