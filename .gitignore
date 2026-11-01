@@ -1,6 +1,9 @@
 node_modules/
 dist/
 release/
+release-signed/
+*.pfx
+*.p12
 artifacts/
 .env
 *.log

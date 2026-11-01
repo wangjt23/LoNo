@@ -35,6 +35,8 @@ npm run test:desktop
 
 当前验收结果与待验证边界见 [VALIDATION.md](VALIDATION.md)。
 
+Windows 启动拦截的诊断与可信签名流程见 [WINDOWS-SIGNING.md](WINDOWS-SIGNING.md)。正式签名使用独立的 `dist:win:signed` 命令；当前缺少签名凭据，尚未解除 Smart App Control 对 v0.1.1 的拦截。
+
 Electron 首次运行可能下载运行时，打包时会下载 NSIS 工具。请确保可访问 npm 和 GitHub Releases。Electron binary 的版本和 SHA-256 由其 npm 包校验。运行环境未提供 npm 时可从 Node.js 官方发行版安装完整工具链。
 
 ```text
