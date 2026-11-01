@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+artifacts/
+.env
+*.log
+*.sqlite*
+*.db*
+.runtime/
+coverage/
