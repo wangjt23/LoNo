@@ -1,0 +1,38 @@
+{
+  "name": "shiguang-reminder",
+  "version": "0.1.0",
+  "description": "本地优先的智能工作提醒助手",
+  "author": "Shiguang contributors",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.js",
+    "test:desktop": "node scripts/smoke.mjs",
+    "pack": "electron-builder --dir",
+    "dist:win": "electron-builder --win portable --x64"
+  },
+  "dependencies": {
+    "imapflow": "^2.10.0",
+    "mailparser": "^3.9.0",
+    "sql.js": "^1.13.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0",
+    "playwright": "^1.56.0"
+  },
+  "build": {
+    "appId": "com.shiguang.reminder",
+    "productName": "Shiguang Reminder",
+    "directories": { "output": "release" },
+    "files": ["src/**/*", "package.json"],
+    "asar": true,
+    "win": { "target": "portable", "signAndEditExecutable": false },
+    "portable": { "artifactName": "Shiguang-Reminder-${version}-win-x64.exe" },
+    "mac": { "target": "dmg" },
+    "linux": { "target": "AppImage" }
+  }
+}
