@@ -47,14 +47,28 @@ try {
   const capture = app.windows().find(w => w.url().includes('capture=1'));
   assert.ok(capture, 'quick capture window exists');
   capture.on('pageerror', error => errors.push(error.message));
+  await capture.locator('#capture-text').waitFor();
+  await capture.screenshot({ path: path.join(artifacts, '00-quick-capture.png') });
+  assert.ok(await capture.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), 'collapsed capture fits without scrolling');
+  await capture.locator('#capture-text').fill('未保存的草稿');
+  await capture.locator('#capture-text').press('Escape');
+  await main.locator('.new-button').click();
+  assert.equal(await capture.locator('#capture-text').inputValue(), '未保存的草稿', 'Escape preserves draft');
   await capture.locator('#capture-text').fill('明天下午三点提醒我提交项目材料，提前半小时提醒');
-  await capture.locator('#analyze-button').click();
+  await capture.locator('#capture-text').press('Control+Enter');
   await capture.locator('#capture-save-form').waitFor();
   const reminder = await capture.locator('[name="remindAt"]').inputValue();
   assert.ok(reminder.endsWith('14:30'), `Chinese date/lead parse: ${reminder}`);
+  assert.ok(await capture.evaluate(() => { const b = document.querySelector('#capture-save-form button[type="submit"]').getBoundingClientRect(); return b.bottom <= innerHeight && b.top >= 0; }), 'save action fits in the expanded capture');
   await capture.screenshot({ path: path.join(artifacts, '02-capture.png') });
-  await capture.locator('#capture-save-form button[type="submit"]').click();
+  await capture.locator('#capture-text').press('Control+Enter');
   await main.locator('.task-row').waitFor();
+  assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('capture=1')).isVisible()), false, 'saving dismisses the capture window');
+  await main.keyboard.press('Control+f');
+  assert.equal(await main.locator('#search').evaluate(el => el === document.activeElement), true);
+  await main.locator('#search').fill('不匹配的搜索词');
+  assert.equal(await main.locator('.task-row').count(), 0);
+  await main.locator('#search').fill('');
   await main.locator('.task-check').click();
   await main.locator('[data-view="done"]').click();
   await main.locator('.task-row.completed').waitFor();
@@ -79,6 +93,7 @@ try {
   await main.locator('[name="model.apiKey"]').fill('model-test-secret');
   await main.locator('#settings-form button[type="submit"]').click();
   await main.getByText('设置已安全保存', { exact: true }).waitFor();
+  await main.locator('.new-button').click();
   await capture.getByText('已启用模型 · 内容将发送到配置的模型服务', { exact: true }).waitFor();
   modelDelay = 250;
   await capture.locator('#capture-text').fill('明天提交旧内容');
@@ -99,6 +114,11 @@ try {
   await main.screenshot({ path: path.join(artifacts, '03-sources.png') });
   await main.locator('[data-view="all"]').click();
   assert.equal(await main.locator('.task-row').count(), 2);
+  assert.equal(await main.locator('nav button.active').count(), 1);
+  assert.equal(await main.locator('nav button.active').getAttribute('data-view'), 'all');
+  await main.mouse.move(1100, 70);
+  await main.locator('#toast').evaluate(el => el.className = '');
+  await main.waitForTimeout(180); // Let hover/toast transitions settle before visual QA.
   await main.screenshot({ path: path.join(artifacts, '04-workspace.png') });
   const snapshot = await main.evaluate(() => window.reminder.invoke('snapshot'));
   assert.equal(snapshot.tasks.length, 2); assert.ok(snapshot.tasks.some(t => t.source === 'manual'));
@@ -146,5 +166,5 @@ try {
   await restarted.evaluate(() => window.reminder.invoke('smoke', 'due'));
   assert.equal(await app.evaluate(() => globalThis.testNotificationCalls), countBeforeNewSchedule + 1, 'old visible notification does not block a snoozed schedule');
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ status: 'passed', assertions: 'capture, Chinese dates, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut registration, restart, notification failure/retry/deduplication', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, Escape draft retention, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
 } finally { if (app) await app.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const channels = new Set(['snapshot', 'analyze', 'save-capture', 'update-task', 'save-settings', 'sync', 'capture', 'hide-capture', 'test-notification', 'export', 'import']);
+const channels = new Set(['snapshot', 'analyze', 'save-capture', 'update-task', 'save-settings', 'sync', 'capture', 'hide-capture', 'capture-layout', 'test-notification', 'export', 'import']);
 if (process.argv.includes('--smoke')) channels.add('smoke');
 contextBridge.exposeInMainWorld('reminder', {
   invoke: async (name, value) => {

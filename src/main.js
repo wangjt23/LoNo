@@ -14,7 +14,7 @@ const smoke = process.argv.includes('--smoke');
 const dataArg = process.argv.find(a => a.startsWith('--data-dir='));
 if (dataArg) app.setPath('userData', path.resolve(dataArg.slice(11)));
 app.setAppUserModelId('com.shiguang.reminder');
-let mainWindow, captureWindow, tray, store, config, timer, quitting = false, syncing = false;
+let mainWindow, captureWindow, tray, store, config, timer, quitting = false, syncing = false, captureExpanded = false;
 let shortcutOK = false, startupWarning = '', notificationWarning = '', notificationBusy = false;
 const previews = new Map();
 const notifications = new Set();
@@ -35,10 +35,17 @@ function secureWindow(win) {
   win.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
 }
 function showMain() { if (mainWindow) { mainWindow.show(); mainWindow.restore(); mainWindow.focus(); } }
+function layoutCapture(useCursor = false) {
+  const area = useCursor ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea : screen.getDisplayMatching(captureWindow.getBounds()).workArea;
+  const width = Math.min(680, area.width - 32);
+  const height = Math.min(captureExpanded ? 640 : 310, area.height - 40);
+  const current = captureWindow.getBounds();
+  const x = useCursor ? area.x + (area.width - width) / 2 : Math.max(area.x + 16, Math.min(current.x, area.x + area.width - width - 16));
+  const y = useCursor ? area.y + (area.height - height) / 3 : Math.max(area.y + 20, Math.min(current.y, area.y + area.height - height - 20));
+  captureWindow.setBounds({ x: Math.round(x), y: Math.round(y), width, height });
+}
 function capture() {
-  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
-  const bounds = captureWindow.getBounds();
-  captureWindow.setPosition(Math.round(area.x + (area.width - bounds.width) / 2), Math.round(area.y + Math.max(30, (area.height - bounds.height) / 3)));
+  layoutCapture(true);
   captureWindow.show(); captureWindow.focus(); captureWindow.webContents.send('capture-focus');
 }
 function broadcast() { for (const win of [mainWindow, captureWindow]) if (win && !win.isDestroyed()) win.webContents.send('changed'); }
@@ -51,7 +58,7 @@ async function start() {
   config = new Config(path.join(app.getPath('userData'), 'settings.json'), safeStorage);
   try { await config.load(); } catch { startupWarning = '设置或系统密钥无法读取，本次使用离线模式；原设置文件已保留。请先备份，再重新配置。'; }
   mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: '拾光提醒 · Shiguang', show: false }));
-  captureWindow = new BrowserWindow(windowOptions({ width: 650, height: 635, minWidth: 550, minHeight: 530, title: '快速记录 · 拾光提醒', alwaysOnTop: true, resizable: true, skipTaskbar: true, show: false }));
+  captureWindow = new BrowserWindow(windowOptions({ width: 680, height: 340, title: '快速记录 · 拾光提醒', frame: false, hasShadow: true, roundedCorners: true, backgroundColor: '#f7f7f9', alwaysOnTop: true, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, show: false }));
   for (const win of [mainWindow, captureWindow]) { secureWindow(win); win.setMenuBarVisibility(false); }
   mainWindow.on('close', event => { if (!quitting && tray) { event.preventDefault(); mainWindow.hide(); } });
   captureWindow.on('close', event => { if (!quitting) { event.preventDefault(); captureWindow.hide(); } });
@@ -62,7 +69,7 @@ async function start() {
   tray = new Tray(trayIcon()); tray.setToolTip('拾光提醒 · Ctrl+Shift+Space 快速记录');
   tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开拾光提醒', click: showMain }, { label: '快速记录', click: capture }, { type: 'separator' }, { label: '退出（停止提醒）', click: () => { quitting = true; app.quit(); } }]));
   tray.on('double-click', showMain);
-  shortcutOK = globalShortcut.register('CommandOrControl+Shift+Space', capture);
+  shortcutOK = globalShortcut.register('CommandOrControl+Shift+Space', () => { if (captureWindow.isVisible() && captureWindow.isFocused()) captureWindow.hide(); else capture(); });
   if (!shortcutOK) startupWarning += ' 全局快捷键被其他程序占用，可使用托盘快速记录。';
   powerMonitor.on('resume', () => { checkDue(); void syncAll(); });
   resetPolling();
@@ -83,11 +90,6 @@ function registerIPC() {
     if (previews.size > 100) previews.delete(previews.keys().next().value);
     const analysis = await analyze(text, { manual: true, model: config.value.model });
     const token = randomUUID(); previews.set(token, { text: text.trim(), analysis, expires: Date.now() + 30 * 60000 });
-    if (captureWindow.isVisible()) {
-      const area = screen.getDisplayMatching(captureWindow.getBounds()).workArea;
-      const height = Math.min(800, area.height - 50);
-      captureWindow.setBounds({ x: Math.round(area.x + (area.width - 650) / 2), y: Math.round(area.y + (area.height - height) / 2), width: 650, height });
-    }
     return { token, ...analysis };
   });
   handle('save-capture', ({ token, fields }) => {
@@ -113,6 +115,13 @@ function registerIPC() {
   handle('sync', async () => { await syncAll(); return syncStatus; });
   handle('capture', () => capture());
   handle('hide-capture', () => captureWindow.hide());
+  handle('capture-layout', state => {
+    if (!['input', 'preview'].includes(state)) throw new Error('无效的弹窗状态');
+    const expanded = state === 'preview';
+    if (expanded === captureExpanded) return;
+    captureExpanded = expanded;
+    if (captureWindow.isVisible()) layoutCapture();
+  });
   handle('test-notification', () => {
     if (!Notification.isSupported()) throw new Error('系统当前不支持通知');
     sendNotification('提醒测试', '系统通知已触发；若未看到，请检查 Windows 通知与勿扰设置。', false);
