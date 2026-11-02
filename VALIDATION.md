@@ -2,7 +2,7 @@
 
 ## 0.3.12 首次邮箱导入14天与正式发布
 
-82项核心测试验证IMAP的14天查询和首次50封上限、后续UID增量，以及Exchange的第8至14天纳入、第15天排除、持久化cutoff保持与每页50变化限制。Windows源码桌面回归通过；正式安装包和Mac结果以本版本标签Actions最终结果为准。
+82项核心测试验证IMAP的14天查询和首次50封上限、后续UID增量，以及Exchange的第8至14天纳入、第15天排除、持久化cutoff保持与每页50变化限制。Windows源码桌面回归通过。[最终标签Actions](https://github.com/wangjt23/LoNo/actions/runs/41485888393) 的test、Windows x64、Mac arm64、Mac x64及release全部成功；各平台82项核心测试、最终目录EXE/DMG内应用桌面回归通过，Mac完成DMG挂载与严格签名校验。Actions自动发布Windows安装EXE、免安装ZIP、两种Mac DMG和SHA256SUMS；已核对v0.3.12为latest、非draft且非prerelease。
 
 ## 0.3.11 未来安排与结构整理
 
