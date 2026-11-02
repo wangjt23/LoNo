@@ -3,6 +3,7 @@
   "version": "0.3.7",
   "description": "LoNo · 智能工作提醒助手",
   "author": "LoNo contributors",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "main": "src/main.js",
