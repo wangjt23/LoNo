@@ -208,3 +208,5 @@ dialog { background: #f9faffed; border-color: #ffffffb3; }
 #memory-form .field { margin-bottom: 18px; }
 #memory-form textarea { width: 100%; resize: vertical; font: inherit; padding: 12px; border: 1px solid #d5d5db; border-radius: 10px; background: #ffffff80; }
 #memory-filter { border: 0; border-radius: 9px; padding: 8px 12px; background: #f1f3f880; color: #636975; font: inherit; font-size: 12px; }
+
+.engine-badge { font-size: 10px; color: #456fa4; background: #e7effa; border-radius: 5px; padding: 2px 5px; } .engine-badge.local { color: #89909b; background: #eff0f3; }

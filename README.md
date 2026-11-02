@@ -4,7 +4,7 @@ Windows 优先、可迁移 macOS/Linux 的本地智能提醒应用。详细设�
 
 ## 使用
 
-当前修复版为 `release/Shiguang-Reminder-0.1.1-win-x64.exe`。这是便携版，不需要安装；第一次启动后请固定放在一个位置。更新时先通过托盘退出旧版，再打开新版；使用相同数据目录并自动迁移已有记录。本次构建在当前机器受到 Device Guard 启动策略拦截，运行验收边界见 [REVIEW.md](REVIEW.md)。
+当前源码版本为 **0.2.1**，包含 Exchange 定时同步、工作记忆和 DeepSeek 官方配置入口。更新时先从托盘退出旧版，再启动新版；本地数据库自动迁移。Windows 便携包未签名，目标机器的执行策略验收见 [VALIDATION.md](VALIDATION.md)。
 
 1. 点击「快速记录」，或按 **Ctrl + Shift + Space** 唤起置顶输入窗口。
 2. 在 Spotlight 风格输入栏中输入「明天下午三点提醒我提交材料，提前半小时提醒」，按 **Enter** 或点击右侧箭头。
@@ -14,9 +14,9 @@ Windows 优先、可迁移 macOS/Linux 的本地智能提醒应用。详细设�
 
 快捷弹窗没有关闭按钮，**点击其他窗口会自动收起**并保留未保存的草稿；**Esc** 也可收起。**Shift+Enter** 可换行。顶部窄区域可以拖动。主快捷键为 **Ctrl+Shift+Space**，同时注册备用 **Ctrl+Alt+Space**，主键被占用时自动显示可用的备用组合；设置中可以重新注册。主窗口支持 **Ctrl+F** 聚焦搜索。macOS 对应使用 Command。
 
-本机桌面的「拾光提醒（最新版）」快捷方式启动当前源码的 0.2.0，而 `release/` 中现有便携包仍是旧版。0.2.0 已沿用原数据目录启动，切换前的数据备份位于忽略目录 `.runtime/backups/`。
+本机桌面的「拾光提醒（最新版）」快捷方式运行当前源码，沿用原数据目录。切换前的数据备份位于忽略目录 `.runtime/backups/`。
 
-当前源码已更新为简洁浅色界面，采用灰白层次和少量蓝色强调。设计与本轮截图验证见 [UI-DESIGN.md](UI-DESIGN.md)。现有 `release/` 中的 0.1.1 便携包未随本轮 UI 修改重新构建；体验新版请运行源码版。
+当前源码已更新为简洁浅色界面，采用灰白层次和少量蓝色强调。设计与本轮截图验证见 [UI-DESIGN.md](UI-DESIGN.md)。旧版 0.1.x 不包含本轮功能，请使用最新版。
 
 关闭主窗口后继续在托盘运行；托盘右键可以打开、快速记录或退出。**彻底退出、电脑关机或休眠期间不能发送提醒**；运行中每 15 秒检查，启动和唤醒时检查错过的提醒。发送成功后不会反复弹出；可手动延后再次提醒。请使用设置里的通知测试检查 Windows 通知/勿扰设置。
 
@@ -81,7 +81,7 @@ scripts/smoke.mjs      实际 Electron 集成验证
 
 ## 邮箱
 
-对于单位自建 Exchange，如果 IMAP 不可用，可在邮件设置中打开「测试 EWS 连接」。填写 HTTPS EWS 地址（通常为 `/EWS/Exchange.asmx`）、账号、可选域和本次密码。该入口通过 NTLM 验证是否能读取收件箱计数，**不会读取正文、修改已读或保存密码**；测试完成会清空密码框。当前仅提供 EWS 连接测试，EWS 定时采集尚未实现，不能把测试成功视为已经开启自动同步。
+对于单位自建 Exchange，如果 IMAP 不可用，可在邮件设置中打开「测试 EWS 连接」。填写 HTTPS EWS 地址（通常为 `/EWS/Exchange.asmx`）、账号、可选域和本次密码。选择「仅测试连接」时，通过 NTLM 验证收件箱计数，**不读取正文、修改已读或保存密码**，完成后清空密码框。「仅测试连接」不保存密码；选择「保存并开始采集」才会加密保存凭据并开启收件箱正文同步。
 
 使用 Electron 原生网络认证，每次测试创建独立内存会话；只向地址一致的 NTLM/Negotiate 服务端认证挑战提供本次凭据，不使用系统登录身份、不响应代理认证、不跟随重定向，保持 TLS 证书校验。测试后清理认证缓存和连接。无需系统 curl；其他平台尚未实机验证。测试窗口可以用独立临时配置启动，不影响日常 App 的设置和全局快捷键：
 
@@ -150,3 +150,26 @@ Authorization: Bearer <bridge-token>
 - 新任务按英文词与中文二字词片，在本地检索最多5条相关的已确认记忆；启用模型后随原文发送。当前没有向量语义检索。离线规则不使用记忆调整时间；明确日期以本次原文为准，不根据旧流程凭空生成期限。
 - 分析详情展示当时提供给模型的记忆；它表示提供了背景，不代表模型逐条采用。来源可追溯到原记录。
 - 记忆保存于同一个 SQLite，随「导出记录」归档；当前没有自动冲突合并、过期淘汰、工作流执行或通用 Copilot 式全平台控制。
+
+## Exchange 定时采集（0.2.1）
+
+在「偏好设置 → 邮件采集」选择 Exchange / EWS，填写 HTTPS EWS 地址、邮箱 / 域账号、密码和可选域，开启同步并保存。也可以从 EWS 弹窗直接「保存并开始采集」。连接凭据使用系统加密，不回传界面。与 IMAP 共用采集频率，默认5分钟；应用启动、唤醒及手动同步也会检查。
+
+采用 SyncFolderItems 游标，每轮最多50个变化；首次分批扫描收件箱，只导入近7天邮件，可能需要几轮完成初始扫描。GetItem 只读取主题、纯文本正文、发件人和收件时间；不改变已读、发送邮件或下载附件。删除/已读变化不移除本地记录；已导入邮件的后续编辑不重复生成任务。每页全部消费成功才提交游标，中断后通过稳定邮件 ID 去重。认证/权限失败后暂停自动尝试，修改邮件设置或手动「恢复邮件同步」后重试。游标失效会在下轮重新扫描，原记录保留去重。
+
+模型返回结构化 JSON：shouldRemind、title、dueAt、remindAt、priority、confidence、reason。标题应概括正文中的行动，不直接复制含糊主题。没有明确时间进入待确认。来源标签标明邮件/企业微信/快捷记录，另显示 AI 分析或本地规则；AI 失败时明确降级。今日安排排除已过截止时间的事项，逾期内容保留在总览。
+
+新邮件分析会检索最多5条已确认记忆；开启「从新邮件提取候选记忆」后，还会生成带证据的候选，和邮件记录一起原子保存。之前的本地规则结果不会自动重写或冒充AI结果。
+
+DeepSeek 官方预设：完整地址 https://api.deepseek.com/chat/completions，当前模型 deepseek-flash。使用非思考模式和 JSON 输出，将返回结果经过本地 schema 校验。可在设置中「测试已保存的 AI 配置」。参见 [官方模型文档](https://api-docs.deepseek.com/quick_start/) 和 [思考模式参数](https://api-docs.deepseek.com/guides/thinking_mode/)。
+
+## 产品 Demo 与复现
+
+演示视频使用真实 App 操作录屏，邮箱及模型为受控模拟数据，不包含真实邮件或密钥。视频使用 Remotion 添加片头、分镜和中文字幕；录制时采用不透明画布以避免 Windows Acrylic 在录屏中变黑。视频工具仅为开发依赖，不进入 App 运行包。
+
+- npm run test:exchange：完整 EWS → AI → 记忆桌面闭环、去重、认证暂停、恢复及重启验证。
+- npm run test:exchange:timer：等待真实一分钟轮询验证自动采集。
+- npm run demo:record：Playwright / Electron 录制干净操作视频，需先执行 node node_modules/playwright/cli.js install ffmpeg。
+- npm run demo:render：Remotion 渲染1080p MP4和封面；首次可执行 node node_modules/@remotion/cli/remotion-cli.js browser ensure 下载渲染浏览器。
+
+输出位于 artifacts/demo（Git忽略）；可编辑 demo/index.jsx 和 scripts/exchange-demo.mjs。Remotion 的 [渲染文档](https://www.remotion.dev/docs/render) 提供更多导出选项。

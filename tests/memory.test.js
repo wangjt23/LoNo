@@ -44,6 +44,14 @@ test('local extraction avoids one-off tasks and model extraction refuses invente
   assert.equal(invalid.memories[0].content, text);
 });
 
+test('disabling email memory extraction also suppresses local candidates', async () => {
+  const store = await Store.open();
+  const text = '报销流程通常先整理发票，再提交部门审核';
+  store.ingest({ source: 'email', text }, analyzeLocal(text), undefined, false);
+  assert.equal(store.records().length, 1); assert.deepEqual(store.memories(), []);
+  store.close();
+});
+
 test('model analysis only receives confirmed memories and records the exact supplied context', async () => {
   const memories = [{ id: 'yes', status: 'approved', kind: 'workflow', content: '项目材料先经过部门审核' }, { id: 'no', status: 'candidate', kind: 'fact', content: '不应发送' }];
   const result = await analyze('明天提交项目材料', {

@@ -1,6 +1,6 @@
 {
   "name": "shiguang-reminder",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "本地优先的智能工作提醒助手",
   "author": "Shiguang contributors",
   "private": true,
@@ -12,7 +12,11 @@
     "test:desktop": "node scripts/smoke.mjs",
     "pack": "electron-builder --dir",
     "dist:win": "electron-builder --win portable --x64",
-    "dist:win:signed": "electron-builder --config electron-builder.signed.cjs --win portable --x64"
+    "dist:win:signed": "electron-builder --config electron-builder.signed.cjs --win portable --x64",
+    "test:exchange": "node scripts/exchange-demo.mjs",
+    "test:exchange:timer": "node scripts/exchange-demo.mjs --timer",
+    "demo:record": "node scripts/exchange-demo.mjs --video --clean-video",
+    "demo:render": "node scripts/render-demo.mjs"
   },
   "dependencies": {
     "fast-xml-parser": "^5.11.2",
@@ -22,9 +26,13 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@remotion/cli": "^4.0.540",
     "electron": "45.2.1",
     "electron-builder": "26.18.0",
-    "playwright": "^1.56.0"
+    "playwright": "^1.56.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "remotion": "^4.0.540"
   },
   "build": {
     "appId": "com.shiguang.reminder",

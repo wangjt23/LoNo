@@ -10,7 +10,9 @@ import { Config } from './core/config.js';
 import { pollMail, pollBridge, bridgeSchema, identity } from './core/connectors.js';
 import { trayIcon } from './icon.js';
 import { registerCaptureKeys } from './core/shortcuts.js';
-import { testExchangeLocally } from './exchange-transport.js';
+import { testExchangeLocally, pollExchangeLocally } from './exchange-transport.js';
+import { mailStateKey } from './core/exchange-sync.js';
+import { exchangeInput, exchangeRequestOptions } from './core/exchange.js';
 import { extractMemories } from './core/memory.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -106,7 +108,7 @@ async function start() {
     captureBlurTimer = setTimeout(() => { if (!captureWindow.isDestroyed() && !captureWindow.isFocused()) captureWindow.hide(); }, 100);
   });
   registerIPC();
-  await mainWindow.loadFile(path.join(root, 'ui/index.html'), { query: exchangeTestMode ? { exchangeTest: '1', endpoint: launchValue('endpoint'), account: launchValue('account') } : {} });
+  await mainWindow.loadFile(path.join(root, 'ui/index.html'), { query: exchangeTestMode ? { exchangeTest: '1', endpoint: launchValue('endpoint'), account: launchValue('account') } : process.argv.includes('--exchange-setup') ? { exchangeSetup: '1', endpoint: launchValue('endpoint'), account: launchValue('account') } : {} });
   await captureWindow.loadFile(path.join(root, 'ui/index.html'), { query: { capture: '1' } });
   if (!process.argv.includes('--quick-capture')) mainWindow.show();
   tray = new Tray(trayIcon()); tray.setToolTip('拾光提醒 · Ctrl+Shift+Space 快速记录');
@@ -144,6 +146,20 @@ function registerIPC() {
     return { count, warning: result.warning, engine: result.engine };
   });
   handle('test-exchange', input => testExchangeLocally(input));
+  handle('test-model', async () => {
+    if (!config.value.model.enabled) throw new Error('请先启用并保存模型设置');
+    const result = await analyze('FW: 有关事项说明\n请于明天下午三点前提交项目验收材料，提前一小时提醒。', { source: 'email', model: config.value.model });
+    if (result.engine !== 'model') throw new Error('模型未返回有效的提醒 JSON，请检查地址、模型名称、密钥和账户余额');
+    return result;
+  });
+  handle('connect-exchange', async input => {
+    if (syncing) throw new Error('正在同步，请稍后再试');
+    if (startupWarning) throw new Error('请先处理设置读取问题，再保存连接');
+    const value = exchangeInput.parse(input); exchangeRequestOptions(value);
+    await config.save({ ...config.value, mail: { ...config.value.mail, enabled: true, protocol: 'exchange', endpoint: value.endpoint, user: value.user, domain: value.domain, password: value.password } });
+    const key = mailStateKey(config.value.mail); store.setState(key, { ...store.state(key, {}), authPaused: false });
+    resetPolling(); broadcast(); await syncAll(); return syncStatus.email;
+  });
   handle('analyze', async text => {
     if (previews.size > 100) previews.delete(previews.keys().next().value);
     const analysis = await analyze(text, { manual: true, model: config.value.model, memories: typeof text === 'string' ? store.recall(text) : [] });
@@ -168,9 +184,18 @@ function registerIPC() {
       await config.save(previous);
       throw new Error('未能更新系统登录启动项，设置已还原');
     }
+    if (JSON.stringify(previous.mail) !== JSON.stringify(config.value.mail)) {
+      const key = mailStateKey(config.value.mail); store.setState(key, { ...store.state(key, {}), authPaused: false });
+    }
     resetPolling(); broadcast(); return result;
   });
   handle('sync', async () => { await syncAll(); return syncStatus; });
+  handle('resume-mail', () => {
+    if (syncing) throw new Error('请等待当前同步完成');
+    const key = mailStateKey(config.value.mail);
+    store.setState(key, { ...store.state(key, {}), authPaused: false });
+    syncStatus.email = { state: 'idle', message: '暂停已解除，下次同步会重试' }; broadcast();
+  });
   handle('capture', () => capture());
   handle('hide-capture', () => captureWindow.hide());
   handle('retry-shortcuts', () => { registerShortcuts(); broadcast(); return shortcutState; });
@@ -215,8 +240,12 @@ async function consume(message) {
   if (store.hasRecord(message.key)) return { duplicate: true };
   const received = new Date(message.receivedAt);
   // Relative dates refer to when a message was sent/received, not the later sync time.
-  const analysis = await analyze(message.text, { now: received, model: config.value.model, memories: store.recall(message.text) });
-  return store.ingest(message, analysis);
+  const analysis = await analyze(message.text, { now: received, source: message.source, sender: message.sender, model: config.value.model, memories: store.recall(message.text) });
+  let memoryExtraction;
+  if (message.source === 'email' && config.value.mail.extractMemory) memoryExtraction = await extractMemories(message.text, { model: config.value.model });
+  // Candidates and the source are committed together. A failed write cannot leave
+  // a source marked consumed without its extracted memories.
+  return store.ingest(message, { ...analysis, ...(memoryExtraction?.warning ? { memoryWarning: memoryExtraction.warning } : {}) }, undefined, message.source === 'email' && !config.value.mail.extractMemory ? false : memoryExtraction?.memories);
 }
 async function syncAll() {
   if (syncing) return;
@@ -226,11 +255,20 @@ async function syncAll() {
       syncStatus.email = { state: 'syncing', message: '正在读取邮件…' }; broadcast();
       try {
         const mail = config.value.mail;
-        const key = `imap:${identity(`${mail.host}:${mail.port}:${mail.user}:${mail.mailbox}`)}`;
-        const result = await pollMail(mail, store.state(key, {}), consume);
+        const key = mailStateKey(mail);
+        const state = store.state(key, {});
+        if (state.authPaused) { const e = new Error('认证失败后已暂停自动尝试；请修改连接设置或点击恢复邮件同步'); e.code = 'PAUSED'; throw e; }
+        const result = mail.protocol === 'exchange'
+          ? await pollExchangeLocally(mail, state, consume, { hasRecord: key => store.hasRecord(key) })
+          : await pollMail(mail, state, consume);
         store.setState(key, result);
         syncStatus.email = { state: 'ok', message: `已处理 ${result.count} 封邮件${result.remaining ? `，剩余 ${result.remaining} 封下轮继续` : ''}`, at: new Date().toISOString() };
-      } catch { syncStatus.email = { state: 'error', message: '邮件同步失败，请检查服务器、TLS、账号和授权码；已处理记录会去重重试。', at: new Date().toISOString() }; }
+      } catch (error) {
+        const key = mailStateKey(config.value.mail);
+        if (error.code === 'AUTH') store.setState(key, { ...store.state(key, {}), authPaused: true });
+        if (error.code === 'ErrorInvalidSyncStateData') store.setState(key, {});
+        syncStatus.email = { state: 'error', message: ['AUTH', 'PAUSED', 'THROTTLED', 'ErrorInvalidSyncStateData'].includes(error.code) ? error.message + (error.code === 'ErrorInvalidSyncStateData' ? '；下轮重新建立游标，原记录会去重' : '') : '邮件同步失败，请检查服务器、TLS、账号或密码；本页游标未推进，已保存记录会去重重试。', at: new Date().toISOString() };
+      }
     }
     if (config.value.bridge.enabled) {
       syncStatus.wecom = { state: 'syncing', message: '正在读取企业微信桥接…' }; broadcast();

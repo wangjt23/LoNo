@@ -55,14 +55,17 @@ export class Store {
   state(key, fallback = null) { const row = this.all('SELECT value FROM state WHERE key=?', [key])[0]; return row ? JSON.parse(row.value) : fallback; }
   setState(key, value) { return this.transaction(() => this.db.run('INSERT OR REPLACE INTO state VALUES (?,?)', [key, JSON.stringify(value)])); }
   hasRecord(key) { return Boolean(this.all('SELECT id FROM records WHERE external_key=?', [key])[0]); }
-  ingest({ key = null, source = 'manual', sender = '', text, receivedAt = new Date().toISOString() }, analysis, override) {
+  ingest({ key = null, source = 'manual', sender = '', text, receivedAt = new Date().toISOString() }, analysis, override, memoryCandidates) {
     if (key && this.hasRecord(key)) return { duplicate: true };
     const fields = taskInput.parse(override || analysis);
     if (fields.remindAt && fields.dueAt && Date.parse(fields.remindAt) > Date.parse(fields.dueAt)) throw new Error('提醒时间不能晚于截止时间');
     return this.transaction(() => {
       const recordId = randomUUID(); const id = randomUUID(); const now = new Date().toISOString();
       this.db.run('INSERT INTO records VALUES (?,?,?,?,?,?,?)', [recordId, key, source, sender, text, receivedAt, JSON.stringify(analysis)]);
-      this.insertMemoryCandidates(recordId, extractLocalMemories(text));
+      if (memoryCandidates !== false) {
+        this.insertMemoryCandidates(recordId, extractLocalMemories(text));
+        if (memoryCandidates) this.insertMemoryCandidates(recordId, memoryCandidates);
+      }
       if (analysis.shouldRemind) {
         const status = fields.remindAt && analysis.confidence >= 0.7 && (!fields.dueAt || Date.parse(fields.dueAt) > Date.now()) ? 'pending' : 'review';
         this.db.run('INSERT INTO tasks (id,record_id,title,due_at,remind_at,priority,status,notified_at,created_at,completed_at) VALUES (?,?,?,?,?,?,?,?,?,?)', [id, recordId, fields.title, fields.dueAt, fields.remindAt, fields.priority, override && fields.remindAt ? 'pending' : status, null, now, null]);

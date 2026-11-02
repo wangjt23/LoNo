@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 const dir = mkdtempSync(path.join(os.tmpdir(), 'shiguang-desktop-'));
 const artifacts = path.resolve('artifacts'); mkdirSync(artifacts, { recursive: true });
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
-const launch = () => electron.launch({ executablePath: process.env.SHIGUANG_EXECUTABLE || undefined, args: [...(process.env.SHIGUANG_EXECUTABLE ? [] : ['.']), '--smoke', `--data-dir=${dir}`], env, timeout: 30000 });
+const launch = () => electron.launch({ executablePath: process.env.SHIGUANG_EXECUTABLE || undefined, args: [...(process.env.SHIGUANG_EXECUTABLE ? [] : [process.env.SHIGUANG_APP || '.']), '--smoke', `--data-dir=${dir}`], env, timeout: 30000 });
 async function mainPage(app) {
   const deadline = Date.now() + 15000;
   while (Date.now() < deadline) {

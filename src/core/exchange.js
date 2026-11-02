@@ -18,7 +18,8 @@ export function exchangeRequestOptions(input) {
 
 // The factory is Electron net.request in production; credentials are supplied only
 // to a matching server's auth challenge, never placed in URL/headers/files/logs.
-export function requestExchange(input, createRequest) {
+export function requestExchange(input, createRequest, operation = 'GetFolder', body = envelope) {
+  if (!['GetFolder', 'SyncFolderItems', 'GetItem'].includes(operation)) throw new Error('不支持的只读 EWS 操作');
   const value = exchangeInput.parse(input);
   const options = exchangeRequestOptions(value); const url = new URL(options.url);
   const user = value.domain && !value.user.includes('\\') ? `${value.domain}\\${value.user}` : value.user;
@@ -29,7 +30,7 @@ export function requestExchange(input, createRequest) {
     try {
       request = createRequest(options);
       request.setHeader('Content-Type', 'text/xml; charset=utf-8');
-      request.setHeader('SOAPAction', 'http://schemas.microsoft.com/exchange/services/2006/messages/GetFolder');
+      request.setHeader('SOAPAction', `http://schemas.microsoft.com/exchange/services/2006/messages/${operation}`);
       request.on('login', (auth, callback) => {
         if (settled || auth.isProxy || auth.host.toLowerCase() !== url.hostname.toLowerCase() || Number(auth.port) !== Number(url.port || 443) || !['ntlm', 'negotiate'].includes(auth.scheme?.toLowerCase())) {
           callback(); fail('Exchange 返回了不匹配的认证请求，已停止传递凭据'); return;
@@ -52,7 +53,7 @@ export function requestExchange(input, createRequest) {
           resolve({ status: response.statusCode, body: Buffer.concat(chunks).toString('utf8') });
         });
       });
-      request.end(envelope);
+      request.end(body);
     } catch { fail('无法创建 Exchange 网络请求'); }
   });
 }

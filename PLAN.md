@@ -56,3 +56,13 @@
 本轮完成 SQLite 迁移、四类记忆、审核/编辑/忽略/删除、原文证据、规范化去重、本地检索、模型上下文、导出以及桌面验收。原文不直接成为可信指令；未确认记忆不进入模型上下文。自动提取先使用保守本地规则，复杂内容按记录主动调用模型。
 
 后续继续演进：向量与关键词混合检索、记忆冲突和有效期、按人/事项聚合的工作事件流、经确认的流程模板、周月报。跨应用权限与真实数据源验收仍分别推进。
+
+## 0.2.1 本轮交付
+
+1. 只读 EWS SyncFolderItems / GetItem；增量分页、近7天首次导入、断点去重、认证暂停与游标恢复。
+2. 接入既有结构化提醒分类及已确认记忆检索，新邮件可自动提取候选记忆并与原文同事务保存。
+3. 官方 DeepSeek 配置和真实模型验证；正文驱动的行动标题；UI 区分数据来源和分析引擎。
+4. 今日安排剔除逾期事项，保留总览中的记录与逾期标记。
+5. 核心、桌面、一分钟真实轮询、打包测试；用 Remotion 输出可复现的产品演示 MP4。
+
+EWS 设计参考微软 [同步指南](https://learn.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-synchronize-items-by-using-ews-in-exchange) 及 [GetItem](https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/getitem-operation)。

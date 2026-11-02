@@ -6,13 +6,13 @@ import { validateEndpoint } from './analyzer.js';
 export const defaults = {
   pollMinutes: 5, launchAtLogin: false,
   model: { enabled: false, endpoint: '', model: '', apiKey: '' },
-  mail: { enabled: false, host: '', port: 993, user: '', password: '', mailbox: 'INBOX' },
+  mail: { enabled: false, protocol: 'imap', endpoint: '', domain: '', host: '', port: 993, user: '', password: '', mailbox: 'INBOX', extractMemory: true },
   bridge: { enabled: false, endpoint: '', token: '' },
 };
 const schema = z.object({
   pollMinutes: z.number().int().min(1).max(1440), launchAtLogin: z.boolean(),
   model: z.object({ enabled: z.boolean(), endpoint: z.string().max(2000), model: z.string().max(200), apiKey: z.string().max(4000) }),
-  mail: z.object({ enabled: z.boolean(), host: z.string().max(300), port: z.number().int().min(1).max(65535), user: z.string().max(300), password: z.string().max(4000), mailbox: z.string().min(1).max(300) }),
+  mail: z.object({ enabled: z.boolean(), protocol: z.enum(['imap', 'exchange']).default('imap'), endpoint: z.string().max(2000).default(''), domain: z.string().max(200).default(''), extractMemory: z.boolean().default(true), host: z.string().max(300), port: z.number().int().min(1).max(65535), user: z.string().max(300), password: z.string().max(4000), mailbox: z.string().min(1).max(300) }),
   bridge: z.object({ enabled: z.boolean(), endpoint: z.string().max(2000), token: z.string().max(4000) }),
 });
 
@@ -47,7 +47,13 @@ export class Config {
     }
     if (v.model.enabled) { validateEndpoint(v.model.endpoint); if (!v.model.model.trim()) throw new Error('请填写模型名称'); }
     if (v.bridge.enabled) validateEndpoint(v.bridge.endpoint);
-    if (v.mail.enabled && (!v.mail.host.trim() || !v.mail.user.trim() || !v.mail.password)) throw new Error('请完整填写邮件服务器、账号和授权码');
+    if (v.mail.enabled) {
+      if (!v.mail.user.trim() || !v.mail.password) throw new Error('请填写邮箱账号和密码 / 授权码');
+      if (v.mail.protocol === 'exchange') {
+        const endpoint = validateEndpoint(v.mail.endpoint);
+        if (endpoint.protocol !== 'https:' || endpoint.hash) throw new Error('请填写 HTTPS EWS 接口地址');
+      } else if (!v.mail.host.trim()) throw new Error('请填写 IMAP 服务器');
+    }
     const secrets = { apiKey: v.model.apiKey, password: v.mail.password, token: v.bridge.token };
     const needsEncryption = Object.values(secrets).some(Boolean);
     if (needsEncryption && !await this.safe.isAsyncEncryptionAvailable()) throw new Error('系统凭据加密不可用，无法保存密钥');
