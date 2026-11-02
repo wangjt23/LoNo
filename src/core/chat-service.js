@@ -111,17 +111,17 @@ memories最多3条{kind:"preference|person|workflow|fact",content,evidence}。�
       const related = call.scope === 'sources' ? this.store.tasks().find(t=>t.record_id===row.id) : null;
       if (related) opened.set(related.id, related);
       references.set(call.scope + row.id, { id: row.id, scope: call.scope, title: row.title || row.text.split('\n')[0].slice(0, 100), source: row.source });
-      return { scope: call.scope, record: { id: row.id, ...(call.scope === 'tasks' ? { ...taskFields(row), status: row.status, revision: row.revision } : {}), ...(related ? { taskId:related.id, task:taskFields(related),status:related.status } : {}), analysis:analysisContext(row), source: row.source, sender: row.sender, receivedAt: row.received_at, text: readableSource(row.text).slice(0, 9000), truncated: row.text.length > 9000 } };
+      return { scope: call.scope, record: { id: row.id, ...(call.scope === 'tasks' ? { ...taskFields(row), status: row.status, revision: row.revision } : {}), ...(related ? { taskId:related.id, task:taskFields(related),status:related.status } : {}), analysis:analysisContext(row), source: row.source, accountAlias: row.account_alias, sender: row.sender, receivedAt: row.received_at, text: readableSource(row.text).slice(0, 9000), truncated: row.text.length > 9000 } };
     }
     const query = call.query.toLocaleLowerCase().trim();
     let rows = call.scope === 'tasks' ? this.store.tasks() : call.scope === 'sources' ? this.store.records(0) : this.store.memories().filter(m => m.status === 'approved');
     if (call.scope === 'tasks') rows = rows.filter(t => call.status === 'today' ? isToday(t, this.now()) : call.status === 'overdue' ? isOverdue(t, this.now()) : call.status === 'review' ? isReview(t) : call.status === 'done' ? t.status === 'done' : call.status === 'active' ? t.status !== 'done' : true);
     if (call.from || call.before) rows = rows.filter(row=>{const time=Date.parse(call.scope==='tasks' ? row.due_at || row.remind_at : call.scope==='sources' ? row.received_at : row.updated_at); return Number.isFinite(time) && (!call.from || time>=Date.parse(call.from)) && (!call.before || time<Date.parse(call.before));});
-    rows = rows.filter(row => !query || [row.title, row.text, row.sender, row.content].join(' ').toLocaleLowerCase().includes(query));
+    rows = rows.filter(row => !query || [row.title, row.text, row.sender, row.account_alias, row.content].join(' ').toLocaleLowerCase().includes(query));
     const offset = call.offset || 0;
     const items = rows.slice(offset, offset + 12).map(row => {
       if (call.scope !== 'memories') references.set(call.scope + row.id, { id: row.id, scope: call.scope, title: row.title || row.text.split('\n')[0].slice(0, 100), source: row.source });
-      return { id: row.id, title: row.title, source: row.source, status: row.status, ...(row.title ? taskFields(row) : {}), ...(row.analysis ? {analysis:analysisContext(row)} : {}), snippet: (row.content || readableSource(row.text)).slice(0, 500) };
+      return { id: row.id, title: row.title, source: row.source, accountAlias: row.account_alias, status: row.status, ...(row.title ? taskFields(row) : {}), ...(row.analysis ? {analysis:analysisContext(row)} : {}), snippet: (row.content || readableSource(row.text)).slice(0, 500) };
     });
     return { scope: call.scope, query: call.query, total: rows.length, returned: items.length, offset, hasMore: offset + items.length < rows.length, nextOffset: offset + items.length < rows.length ? offset + items.length : null, items };
   }

@@ -11,7 +11,7 @@ import { pollMail, pollBridge, bridgeSchema, identity } from './core/connectors.
 import { trayIcon } from './icon.js';
 import { registerCaptureKeys } from './core/shortcuts.js';
 import { testExchangeLocally, pollExchangeLocally } from './exchange-transport.js';
-import { mailStateKey } from './core/exchange-sync.js';
+import { accountStateKey, syncMailAccounts } from './core/mail-accounts.js';
 import { exchangeInput, exchangeRequestOptions } from './core/exchange.js';
 import { extractMemories } from './core/memory.js';
 import { MessageService } from './core/message-service.js';
@@ -142,7 +142,7 @@ async function start() {
   store = await Store.open(path.join(app.getPath('userData'), 'reminders.sqlite'));
   if (quitting) return;
   config = new Config(path.join(app.getPath('userData'), 'settings.json'), safeStorage);
-  try { await config.load(); } catch { startupWarning = '设置或系统密钥无法读取，本次使用离线模式；原设置文件已保留。请先备份，再重新配置。'; }
+  try { await config.load(); store.assignLegacyMail(config.value.mailAccounts?.[0]); } catch { startupWarning = '设置或系统密钥无法读取，本次使用离线模式；原设置文件已保留。请先备份，再重新配置。'; }
   if (quitting) return;
   messages = new MessageService(store, () => config.value);
   taskReviews = new TaskReviewService(store, () => config.value.model);
@@ -231,7 +231,7 @@ function registerIPC() {
     if (startupWarning) throw new Error('请先处理设置读取问题，再保存连接');
     const value = exchangeInput.parse(input); exchangeRequestOptions(value);
     await config.save({ ...config.value, mail: { ...config.value.mail, enabled: true, protocol: 'exchange', endpoint: value.endpoint, user: value.user, domain: value.domain, password: value.password } });
-    const key = mailStateKey(config.value.mail); store.setState(key, { ...store.state(key, {}), authPaused: false });
+    const key = accountStateKey(config.value.mail); store.setState(key, { ...store.state(key, {}), authPaused: false });
     resetPolling(); broadcast(); await syncAll(); return syncStatus.email;
   });
   handle('analyze', async text => {
@@ -258,15 +258,20 @@ function registerIPC() {
       await config.save(previous, { retainBlankSecrets: false });
       throw new Error('未能更新系统登录启动项，设置已还原');
     }
-    if (JSON.stringify(previous.mail) !== JSON.stringify(config.value.mail)) {
-      const key = mailStateKey(config.value.mail); store.setState(key, { ...store.state(key, {}), authPaused: false });
+    for(const account of config.value.mailAccounts) {
+      const old=previous.mailAccounts.find(a=>a.id===account.id);
+      if(!old || (!old.enabled && account.enabled) || ['protocol','endpoint','domain','host','port','user','password','mailbox'].some(key=>old[key]!==account[key])) {
+        const key=accountStateKey(account); store.setState(key,{...store.state(key,{}),authPaused:false});
+      }
     }
     resetPolling(); broadcast(); return result;
   });
   handle('sync', async () => { await syncAll(); return syncStatus; });
-  handle('resume-mail', () => {
+  handle('clear-secret', async input => { if(syncing) throw new Error('正在同步，请稍后再清除'); const result=await config.clearSecret(input); resetPolling(); broadcast(); return result; });
+  handle('resume-mail', accountId => {
     if (syncing) throw new Error('请等待当前同步完成');
-    const key = mailStateKey(config.value.mail);
+    const account=config.value.mailAccounts.find(a=>a.id===accountId);if(!account)throw new Error('邮箱不存在');
+    const key = accountStateKey(account);
     store.setState(key, { ...store.state(key, {}), authPaused: false });
     syncStatus.email = { state: 'idle', message: '暂停已解除，下次同步会重试' }; broadcast();
   });
@@ -302,6 +307,10 @@ function registerIPC() {
     broadcast(); return count;
   });
   if (smoke) handle('smoke', async command => {
+    if (command === 'mail-sources') {
+      for (const account of config.value.mailAccounts) store.ingest({ key:'smoke-mail:'+account.id,source:'email',accountId:account.id,accountAlias:account.alias,text:'多邮箱来源测试',receivedAt:new Date().toISOString() }, {shouldRemind:true,title:account.alias+' 来源测试',dueAt:null,remindAt:null,priority:'medium',confidence:.9,reason:'isolated test'});
+      broadcast();
+    }
     if (command === 'capture') capture();
     if (command === 'due') { const tasks = store.tasks().filter(t => t.status === 'pending'); if (tasks[0]) { store.db.run('UPDATE tasks SET remind_at=?, notified_at=NULL WHERE id=?', [new Date(Date.now() - 1000).toISOString(), tasks[0].id]); store.persist(); await checkDue(); } return snapshot(); }
     if (command === 'check') await checkDue();
@@ -316,25 +325,7 @@ async function syncAll() {
   if (syncing) return;
   syncing = true;
   try {
-    if (config.value.mail.enabled) {
-      syncStatus.email = { state: 'syncing', message: '正在读取邮件…' }; broadcast();
-      try {
-        const mail = config.value.mail;
-        const key = mailStateKey(mail);
-        const state = store.state(key, {});
-        if (state.authPaused) { const e = new Error('认证失败后已暂停自动尝试；请修改连接设置或点击恢复邮件同步'); e.code = 'PAUSED'; throw e; }
-        const result = mail.protocol === 'exchange'
-          ? await pollExchangeLocally(mail, state, consume, { hasRecord: key => store.hasRecord(key) })
-          : await pollMail(mail, state, consume);
-        store.setState(key, result);
-        syncStatus.email = { state: 'ok', message: `已处理 ${result.count} 封邮件${result.remaining ? `，剩余 ${result.remaining} 封下轮继续` : ''}`, at: new Date().toISOString() };
-      } catch (error) {
-        const key = mailStateKey(config.value.mail);
-        if (error.code === 'AUTH') store.setState(key, { ...store.state(key, {}), authPaused: true });
-        if (error.code === 'ErrorInvalidSyncStateData') store.setState(key, {});
-        syncStatus.email = { state: 'error', message: ['AUTH', 'PAUSED', 'THROTTLED', 'ErrorInvalidSyncStateData'].includes(error.code) ? error.message + (error.code === 'ErrorInvalidSyncStateData' ? '；下轮重新建立游标，原记录会去重' : '') : '邮件同步失败，请检查服务器、TLS、账号或密码；本页游标未推进，已保存记录会去重重试。', at: new Date().toISOString() };
-      }
-    }
+    await syncMailAccounts({accounts:config.value.mailAccounts,store,pollImap:pollMail,pollExchange:pollExchangeLocally,consume,onStatus:(account,status)=>{syncStatus.mailAccounts ||= {};syncStatus.mailAccounts[account.id]=status;syncStatus.email=status;broadcast();}});
     if (config.value.bridge.enabled) {
       syncStatus.wecom = { state: 'syncing', message: '正在读取企业微信桥接…' }; broadcast();
       try {

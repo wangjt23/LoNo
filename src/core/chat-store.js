@@ -21,7 +21,7 @@ export class ChatStore {
       const id = randomUUID(); let memoryCount = 0, memoryIds = [];
       if (memories.length) {
         const recordId = randomUUID();
-        this.store.db.run('INSERT INTO records VALUES (?,?,?,?,?,?,?)', [recordId, null, 'chat', 'LoNo Chat', userText, new Date().toISOString(), JSON.stringify({ engine: 'model', shouldRemind: false, reason: '聊天中提炼的候选记忆，需用户确认。' })]);
+        this.store.db.run('INSERT INTO records (id,external_key,source,sender,text,received_at,analysis) VALUES (?,?,?,?,?,?,?)', [recordId, null, 'chat', 'LoNo Chat', userText, new Date().toISOString(), JSON.stringify({ engine: 'model', shouldRemind: false, reason: '聊天中提炼的候选记忆，需用户确认。' })]);
         memoryCount = this.store.insertMemoryCandidates(recordId, memories);
         memoryIds = this.store.all('SELECT id FROM memories WHERE record_id=?', [recordId]).map(m => m.id);
       }

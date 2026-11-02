@@ -77,7 +77,7 @@ Need a reminder one day before important meetings? Does a progress report need a
 1. **Capture your first task.** Click Quick Capture, enter the task and time, press Enter to preview, then review and click Add Reminder.
 2. **Work at your own pace.** View today's plans, mark tasks complete or snooze a reminder for 15 minutes.
 3. **Connect AI when you need it.** Enter your model endpoint, model name and API key in Preferences. Agent chat, AI summaries and AI organization require a model; local Chinese parsing works without one.
-4. **Connect your information sources.** Configure IMAP, Exchange / EWS or an authorized WeCom message bridge, and check sync results under Information Sources.
+4. **Connect your information sources.** Add one or more mailboxes, choose IMAP or Exchange / EWS and an alias for each, or connect an authorized WeCom message bridge, and check sync results under Information Sources.
 
 ### Keyboard shortcuts
 

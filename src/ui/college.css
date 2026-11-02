@@ -228,3 +228,21 @@ dialog::backdrop { background: #30202b28; }
 @media (prefers-reduced-transparency: reduce) { .chat-composer { background: #fcf9fb; backdrop-filter: none; } }
 @media (forced-colors: active) { .chat-composer { background: Canvas; border-color: CanvasText; } .chat-intro strong, .chat-citations, .memory-intro p { color: CanvasText; } }
 @media (forced-colors: active) { .ai-summary { background: Canvas; border-color: CanvasText; } .ai-summary-head strong, .summary-overview, .summary-points, .summary-points li::marker, .ai-summary small, .summary-empty { color: CanvasText; } }
+
+/* Preferences keep credential actions local to their field and each mailbox independent. */
+.secret-row { display:flex; align-items:center; gap:20px; margin:18px 0 22px; }
+.secret-row .field { flex:1; min-width:0; }
+.stored-secret::placeholder { color:#262626; opacity:1; letter-spacing:3px; }
+.clear-secret { flex-shrink:0; }
+.mail-account { border:1px solid #881e5518; border-radius:14px; margin:18px 0; background:#ffffff55; }
+.mail-account > summary { display:flex; gap:14px; align-items:center; padding:18px 20px; cursor:pointer; }
+.mail-account > summary strong { color:#881e55; }
+.mail-account > summary span { color:#81747c; font-size:12px; overflow-wrap:anywhere; }
+.mail-account-body { padding:0 20px 20px; }
+.protocol-choice { border:0; padding:12px 0 18px; margin:0; display:flex; gap:12px; }
+.protocol-choice legend { color:#81747c; font-size:12px; padding-top:16px; }
+.protocol-choice label { display:flex; align-items:center; gap:8px; padding:10px 14px; background:#fff9; border:1px solid #881e5520; border-radius:9px; cursor:pointer; }
+.protocol-choice input { accent-color:#881e55; }
+[data-protocol][hidden] { display:none !important; }
+.settings-save { position:static; justify-content:flex-end; background:none; backdrop-filter:none; border:0; border-radius:0; padding:4px 0 12px; }
+@media(max-width:700px) { .secret-row { align-items:stretch; flex-direction:column; gap:8px; } }

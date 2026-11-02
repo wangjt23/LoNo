@@ -19,9 +19,10 @@ export class MessageService {
     if (!Number.isFinite(+received)) throw new Error('来源时间无效，记录未保存');
     const settings = this.getSettings();
     const analysis = await this.analyze(message.text, { now: received, source: message.source, sender: message.sender, model: settings.model, memories: this.store.recall(message.text) });
+    const mail = settings.mailAccounts?.find(a=>a.id===message.accountId) || settings.mail;
     let extraction;
-    if (message.source === 'email' && settings.mail.extractMemory) extraction = await this.extract(message.text, { model: settings.model });
+    if (message.source === 'email' && mail.extractMemory) extraction = await this.extract(message.text, { model: settings.model });
     // Store commits original data, reminder and evidence-backed memories atomically.
-    return this.store.ingest(message, { ...analysis, ...(extraction?.warning ? { memoryWarning: extraction.warning } : {}) }, undefined, message.source === 'email' && !settings.mail.extractMemory ? false : extraction?.memories);
+    return this.store.ingest(message, { ...analysis, ...(extraction?.warning ? { memoryWarning: extraction.warning } : {}) }, undefined, message.source === 'email' && !mail.extractMemory ? false : extraction?.memories);
   }
 }

@@ -22,6 +22,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
     if (!this.all('PRAGMA table_info(tasks)').some(column => column.name === 'revision')) db.run('ALTER TABLE tasks ADD COLUMN revision INTEGER NOT NULL DEFAULT 0');
     db.run(`CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, record_id TEXT, kind TEXT NOT NULL, content TEXT NOT NULL, evidence TEXT NOT NULL, status TEXT NOT NULL, content_key TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`);
+    if (filename && fs.existsSync(filename) && !this.all('PRAGMA table_info(records)').some(c=>c.name==='account_id') && !fs.existsSync(filename+'.before-multi-mail.bak')) fs.copyFileSync(filename,filename+'.before-multi-mail.bak',fs.constants.COPYFILE_EXCL);
+    for (const column of ['account_id', 'account_alias']) if (!this.all('PRAGMA table_info(records)').some(c => c.name === column)) db.run('ALTER TABLE records ADD COLUMN '+column+" TEXT NOT NULL DEFAULT ''");
     this.persist();
   }
   all(sql, params = []) {
@@ -50,14 +52,15 @@ export class Store {
   }
   state(key, fallback = null) { const row = this.all('SELECT value FROM state WHERE key=?', [key])[0]; return row ? JSON.parse(row.value) : fallback; }
   setState(key, value) { return this.transaction(() => this.db.run('INSERT OR REPLACE INTO state VALUES (?,?)', [key, JSON.stringify(value)])); }
+  assignLegacyMail(account) { if(account?.id==='legacy-mail' && this.all("SELECT id FROM records WHERE source='email' AND account_id='' LIMIT 1").length) this.transaction(()=>this.db.run("UPDATE records SET account_id=?,account_alias=? WHERE source='email' AND account_id=''",[account.id,account.alias])); }
   hasRecord(key) { return Boolean(this.all('SELECT id FROM records WHERE external_key=?', [key])[0]); }
-  ingest({ key = null, source = 'manual', sender = '', text, receivedAt = new Date().toISOString() }, analysis, override, memoryCandidates) {
+  ingest({ key = null, source = 'manual', sender = '', accountId = '', accountAlias = '', text, receivedAt = new Date().toISOString() }, analysis, override, memoryCandidates) {
     if (key && this.hasRecord(key)) return { duplicate: true };
     const fields = taskInput.parse(override || analysis);
     if (fields.remindAt && fields.dueAt && Date.parse(fields.remindAt) > Date.parse(fields.dueAt)) throw new Error('提醒时间不能晚于截止时间');
     return this.transaction(() => {
       const recordId = randomUUID(); const id = randomUUID(); const now = new Date().toISOString();
-      this.db.run('INSERT INTO records VALUES (?,?,?,?,?,?,?)', [recordId, key, source, sender, text, receivedAt, JSON.stringify(analysis)]);
+      this.db.run('INSERT INTO records (id,external_key,source,sender,text,received_at,analysis,account_id,account_alias) VALUES (?,?,?,?,?,?,?,?,?)', [recordId, key, source, sender, text, receivedAt, JSON.stringify(analysis), accountId, accountAlias]);
       if (memoryCandidates !== false) {
         this.insertMemoryCandidates(recordId, extractLocalMemories(text));
         if (memoryCandidates) this.insertMemoryCandidates(recordId, memoryCandidates);
@@ -69,10 +72,10 @@ export class Store {
       return { id: analysis.shouldRemind ? id : null, recordId, duplicate: false };
     });
   }
-  tasks() { return this.all(`SELECT t.*, r.source, r.sender, r.text, r.analysis FROM tasks t JOIN records r ON r.id=t.record_id ORDER BY CASE status WHEN 'review' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, COALESCE(remind_at,'9999'), created_at DESC`); }
+  tasks() { return this.all(`SELECT t.*, r.source, r.account_id, r.account_alias, r.sender, r.text, r.analysis FROM tasks t JOIN records r ON r.id=t.record_id ORDER BY CASE status WHEN 'review' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, COALESCE(remind_at,'9999'), created_at DESC`); }
   records(limit = 500) { return this.all(`SELECT * FROM records ORDER BY received_at DESC${limit ? ' LIMIT ?' : ''}`, limit ? [limit] : []); }
   record(id) { return this.all('SELECT * FROM records WHERE id=?', [id])[0]; }
-  task(id) { return this.all('SELECT t.*,r.source,r.sender,r.text,r.analysis,r.received_at FROM tasks t JOIN records r ON r.id=t.record_id WHERE t.id=?', [id])[0]; }
+  task(id) { return this.all('SELECT t.*,r.source,r.account_id,r.account_alias,r.sender,r.text,r.analysis,r.received_at FROM tasks t JOIN records r ON r.id=t.record_id WHERE t.id=?', [id])[0]; }
   applyTaskReview(id, revision, analysis, fields, decision) {
     const checked = analysisSchema.parse(analysis);
     summarySchema.parse(checked.summary);

@@ -62,11 +62,11 @@ try {
   await installDemoExchange(app, messages);
   await cue('散落在邮件里的工作，自动变成提醒', 'Exchange 只读采集 · 日期和重要程度分析 · 本地记忆', 3500);
   await main.locator('[data-view="settings"]').click();
-  await main.locator('[name="mail.protocol"]').selectOption('exchange');
-  await main.locator('[name="mail.endpoint"]').fill('https://mail.demo.invalid/EWS/Exchange.asmx');
-  await main.locator('[name="mail.user"]').fill('demo@example.com');
-  await main.locator('[name="mail.password"]').fill('demo-only-not-a-real-password');
-  await main.locator('[name="mail.enabled"]').check();
+  await main.locator('[data-action="add-mail-account"]').click();
+  await main.locator('[data-mail-account] [name$=".endpoint"]').fill('https://mail.demo.invalid/EWS/Exchange.asmx');
+  await main.locator('[data-mail-account] [name$=".user"]').fill('demo@example.com');
+  await main.locator('[data-mail-account] [name$=".password"]').fill('demo-only-not-a-real-password');
+  await main.locator('[data-mail-account] [name$=".enabled"]').check();
   await main.locator('[name="model.enabled"]').check();
   await main.locator('[name="model.endpoint"]').fill('http://127.0.0.1:' + server.address().port + '/chat/completions');
   await main.locator('[name="model.model"]').fill('demo-model');
