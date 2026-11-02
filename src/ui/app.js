@@ -6,6 +6,7 @@ import { isToday, isOverdue, isReview } from './task-views.js';
 import { readableSource } from '../core/source-text.js';
 import { createRefreshQueue } from './refresh-queue.js';
 const api = window.reminder;
+document.documentElement.dataset.platform = api.platform;
 const $ = selector => document.querySelector(selector);
 const labels = { manual: '快捷记录', chat: 'Agent 聊天', email: '邮件', wecom: '企业微信', high: '重要', medium: '普通', low: '低优先级', pending: '进行中', review: '待确认', done: '已完成' };
 const isCapture = new URLSearchParams(location.search).has('capture');

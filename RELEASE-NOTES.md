@@ -1,9 +1,8 @@
-# LoNo 0.3.7
+# LoNo 0.3.8
 
-- 信息来源的“配置连接”直接定位到对应邮箱或企业微信设置，短暂高亮并支持键盘聚焦。
-- GitHub Actions 构建并测试 Windows x64、macOS Apple Silicon 和 Intel 版本，全部成功后自动发布。
-- Windows 提供安装版 EXE 和免安装 ZIP；Mac 提供对应架构 DMG，拖入 Applications 后运行。
-- 合并 Mac 菜单、Command 快捷键、菜单栏图标及平台 API 适配。
-- 保留 0.3.3 的全局隐藏滚动条和长文本换行修复。
+- 修复Mac仍显示独立原生标题栏的问题：顶部与应用融合，保留原生红黄绿按钮。
+- Mac侧栏为窗口按钮留出独立拖动区，品牌与导航避让；小窗口使用紧凑导航。
+- Mac日期恢复正常右侧间距，Windows继续保留右上角原生窗口按钮。
+- 同一套代码按平台适配；新增Mac内容到顶、按钮位置、小窗口及全屏进出回归。
 
-更新前请退出旧版，本地数据沿用。Windows 未可信签名；Mac 使用 ad-hoc 临时签名，未使用 Developer ID 或 Apple 公证，Gatekeeper 可能阻止运行。CI 桌面测试使用模拟数据及通知，不能替代真实邮箱、系统授权、系统通知及目标机器安装验收。Windows 安装器生成后尚未自动安装/卸载验收。
+通过GitHub Actions构建Windows x64安装版/免安装ZIP、Mac arm64/x64 DMG，全部平台通过后自动发布。更新前请退出旧版，本地数据沿用。Windows未可信签名；Mac仍为临时签名且未经Apple公证。Mac首次运行可在系统设置→隐私与安全性中为LoNo选择“仍要打开”。

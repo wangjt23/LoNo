@@ -149,7 +149,7 @@ async function start() {
   chatStore = new ChatStore(store);
   chatAgent = new ChatService(store, chatStore, () => config.value.model);
   startupPhase = 'windows';
-  mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: 'LoNo · Loop Notify', show: false, ...(process.platform === 'win32' ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: '#65505d', height: 42 } } : {}) }));
+  mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: 'LoNo · Loop Notify', show: false, ...(['win32', 'darwin'].includes(process.platform) ? { titleBarStyle: 'hidden' } : {}), ...(process.platform === 'win32' ? { titleBarOverlay: { color: '#00000000', symbolColor: '#65505d', height: 42 } } : {}), ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 18, y: 22 } } : {}) }));
   if (process.platform === 'win32') {
     try { await configureWindowsIdentity(mainWindow, { app, shell, isolated: smoke || exchangeTestMode || Boolean(dataArg) }); }
     catch (error) { startupWarning = [startupWarning, `Windows 图标设置未完成：${error.message}`].filter(Boolean).join('；'); }

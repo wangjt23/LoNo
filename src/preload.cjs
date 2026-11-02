@@ -3,6 +3,7 @@ const channels = new Set(['snapshot', 'analyze', 'save-capture', 'update-task', 
 for (const channel of ['chat-history', 'chat-send', 'chat-resolve', 'chat-source']) channels.add(channel);
 if (process.argv.includes('--smoke')) channels.add('smoke');
 contextBridge.exposeInMainWorld('reminder', {
+  platform: process.platform,
   invoke: async (name, value) => {
     if (!channels.has(name)) throw new Error('Unsupported operation');
     const result = await ipcRenderer.invoke(name, value);

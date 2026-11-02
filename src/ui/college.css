@@ -47,6 +47,15 @@ nav button.active b { color: #98647f; }
 *::-webkit-scrollbar { display: none; width: 0; height: 0; }
 *::-webkit-scrollbar-button { display: none; }
 .topbar button, .topbar a, .topbar input { -webkit-app-region: no-drag; }
+/* Native Mac traffic lights sit in the sidebar's own header, not a second title bar. */
+:root[data-platform="darwin"] .sidebar { padding-top: 68px; }
+:root[data-platform="darwin"] .sidebar::before { content: ''; position: absolute; inset: 0 0 auto; height: 58px; -webkit-app-region: drag; }
+:root[data-platform="darwin"] .topbar { padding-right: 40px; }
+@media (max-height: 760px) {
+  :root[data-platform="darwin"] .sidebar nav button { padding-top: 6px; padding-bottom: 6px; margin-block: 2px; }
+  :root[data-platform="darwin"] .nav-caption { margin-top: 14px; }
+  :root[data-platform="darwin"] .sidebar-footer { display: none; }
+}
 .settings-card { scroll-margin-top: 96px; }
 .settings-card.settings-target { outline: 2px solid #d14aa480; outline-offset: 4px; box-shadow: 0 0 0 8px #d14aa40b; }
 .breadcrumb b { color: #77646f; }

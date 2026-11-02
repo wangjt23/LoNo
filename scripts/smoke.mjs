@@ -83,6 +83,30 @@ try {
     const keys = (await main.evaluate(() => window.reminder.invoke('snapshot'))).runtime.shortcuts;
     assert.deepEqual(keys.map(key => key.label), ['Command+Shift+Space', 'Command+Option+Space']);
     if (keys.some(key => key.registered)) assert.match(await main.locator('.new-button kbd').textContent(), /⌘/);
+    const chrome = await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('/index.html'));
+      return { buttons: win.getWindowButtonPosition(), bounds: win.getBounds(), content: win.getContentBounds() };
+    });
+    assert.deepEqual(chrome.buttons, { x: 18, y: 22 });
+    assert.equal(chrome.content.y, chrome.bounds.y, 'Mac web content reaches the window top without an extra native title bar');
+    assert.equal(await main.locator('.topbar').evaluate(el => el.getBoundingClientRect().top), 0);
+    assert.ok(await main.locator('.brand').evaluate(el => el.getBoundingClientRect().top >= 58), 'brand clears native traffic lights');
+    assert.equal(await main.locator('.sidebar').evaluate(el => getComputedStyle(el, '::before').webkitAppRegion), 'drag');
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('/index.html')).setSize(960, 650));
+    await main.waitForFunction(() => innerWidth <= 960);
+    assert.ok(await main.locator('nav [data-view="settings"]').evaluate(el => el.getBoundingClientRect().bottom <= innerHeight), 'all Mac navigation fits the minimum window height');
+    await main.screenshot({ path: path.join(artifacts, '09-mac-compact-chrome.png') });
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('/index.html')).setSize(1260, 850));
+    await main.waitForFunction(() => innerWidth >= 1260);
+    for (const fullscreen of [true, false]) {
+      await app.evaluate(({ BrowserWindow }, value) => new Promise((resolve, reject) => {
+        const win = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('/index.html'));
+        const timeout = setTimeout(() => reject(new Error('Mac full-screen transition timed out')), 15000);
+        win.once(value ? 'enter-full-screen' : 'leave-full-screen', () => { clearTimeout(timeout); resolve(); });
+        win.setFullScreen(value);
+      }), fullscreen);
+      assert.equal(await main.locator('.topbar').evaluate(el => Math.round(el.getBoundingClientRect().top)), 0);
+    }
   }
   await main.evaluate(() => { const probe=document.createElement('div'); probe.id='scroll-probe'; probe.style.height='1800px'; document.querySelector('#workspace').append(probe); });
   assert.equal(await main.evaluate(()=>document.documentElement.clientWidth===innerWidth),true,'document scrollbar takes no width');

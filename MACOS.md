@@ -27,6 +27,10 @@ Actions → Desktop CI and Release。普通 main 提交和 PR 自动运行核心
 
 electron-builder 支持通过 `CSC_LINK`、`CSC_KEY_PASSWORD` 载入证书，通过 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` 配置公证。凭据应保存在本机环境或专用 CI Secrets，不写入仓库。当前测试工作流不接入这些 Secrets；正式发布时需另建要求签名、公证成功的发布流程。参见 [macOS 配置](https://www.electron.build/mac/) 和 [签名文档](https://www.electron.build/code-signing-mac.html)。
 
+## 窗口外观
+
+从0.3.8起，Mac和Windows共用界面代码，并按平台配置原生窗口控件。Mac隐藏独立原生标题栏，红黄绿按钮放在侧栏顶部，侧栏和内容顶部保留拖动区；窗口缩小时导航切换为紧凑间距。Windows继续在右上角显示原生最小化、最大化、关闭按钮。
+
 ## 使用与手工验收
 
 - 快速记录：`Command+Shift+Space`；备用 `Command+Option+Space`。系统占用时会显示备用键或冲突提示。
