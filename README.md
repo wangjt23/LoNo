@@ -81,6 +81,16 @@ scripts/smoke.mjs      实际 Electron 集成验证
 
 ## 邮箱
 
+对于单位自建 Exchange，如果 IMAP 不可用，可在邮件设置中打开「测试 EWS 连接」。填写 HTTPS EWS 地址（通常为 `/EWS/Exchange.asmx`）、账号、可选域和本次密码。该入口通过 NTLM 验证是否能读取收件箱计数，**不会读取正文、修改已读或保存密码**；测试完成会清空密码框。当前仅提供 EWS 连接测试，EWS 定时采集尚未实现，不能把测试成功视为已经开启自动同步。
+
+Windows 使用系统 `curl.exe` 的 TLS/NTLM 实现，保持证书校验，不跟随重定向。凭据通过子进程标准输入传递，不进入命令行、日志或临时文件；其他平台需要有支持 NTLM 的 curl，尚未实机验证。测试窗口可以用独立临时配置启动，不影响日常 App 的设置和全局快捷键：
+
+```powershell
+node scripts/open-exchange-test.mjs --endpoint=https://mail.example.com/EWS/Exchange.asmx --account=user@example.com
+```
+
+命令不接受密码参数。密码只在打开的本机窗口输入，且应由用户自己点击测试。网页登录走 ADFS，不代表 IMAP 或 EWS 使用相同登录流程；认证失败需核对域账号及 EWS 权限，避免连续重试。
+
 - 开启邮箱 IMAP，填写 TLS 服务器（通常端口 993）、账号和授权码。首版仅支持 TLS 直连，不支持 STARTTLS/OAuth 交互登录。
 - 首次读取近 7 天最多 50 封；后续按 UID 增量，每轮最多 50 封，有积压时后续轮询继续。
 - 文件夹只读打开，不标记已读、不移动/删除邮件；按账号、文件夹、UIDVALIDITY 和 UID 去重。

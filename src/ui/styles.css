@@ -199,3 +199,4 @@ dialog { background: #f9faffed; border-color: #ffffffb3; }
 .capture-mode #toast { bottom: 8px; font-size: 11px; padding: 7px 12px; }
 @keyframes capture-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .capture-submit:disabled { animation: none; } }
+.exchange-intro { font-size: 12px; line-height: 1.8; color: #6f7888; margin: 0 0 20px; } #exchange-test-result { font-size: 12px; line-height: 1.8; color: #526b85; }

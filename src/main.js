@@ -10,9 +10,12 @@ import { Config } from './core/config.js';
 import { pollMail, pollBridge, bridgeSchema, identity } from './core/connectors.js';
 import { trayIcon } from './icon.js';
 import { registerCaptureKeys } from './core/shortcuts.js';
+import { testExchange } from './core/exchange.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const smoke = process.argv.includes('--smoke');
+const exchangeTestMode = process.argv.includes('--exchange-test');
+const launchValue = key => process.argv.find(a => a.startsWith(`--${key}=`))?.slice(key.length + 3) || '';
 const dataArg = process.argv.find(a => a.startsWith('--data-dir='));
 if (dataArg) app.setPath('userData', path.resolve(dataArg.slice(11)));
 app.setAppUserModelId('com.shiguang.reminder');
@@ -95,25 +98,25 @@ async function start() {
   for (const win of [mainWindow, captureWindow]) { secureWindow(win); win.setMenuBarVisibility(false); }
   for (const win of [mainWindow, captureWindow]) applyMaterial(win);
   nativeTheme.on('updated', () => { for (const win of [mainWindow, captureWindow]) if (!win.isDestroyed()) applyMaterial(win); broadcast(); });
-  mainWindow.on('close', event => { if (!quitting && tray) { event.preventDefault(); mainWindow.hide(); } });
+  mainWindow.on('close', event => { if (exchangeTestMode && !quitting) { quitting = true; app.quit(); } else if (!quitting && tray) { event.preventDefault(); mainWindow.hide(); } });
   captureWindow.on('close', event => { if (!quitting) { event.preventDefault(); captureWindow.hide(); } });
   captureWindow.on('blur', () => {
     clearTimeout(captureBlurTimer);
     captureBlurTimer = setTimeout(() => { if (!captureWindow.isDestroyed() && !captureWindow.isFocused()) captureWindow.hide(); }, 100);
   });
   registerIPC();
-  await mainWindow.loadFile(path.join(root, 'ui/index.html'));
+  await mainWindow.loadFile(path.join(root, 'ui/index.html'), { query: exchangeTestMode ? { exchangeTest: '1', endpoint: launchValue('endpoint'), account: launchValue('account') } : {} });
   await captureWindow.loadFile(path.join(root, 'ui/index.html'), { query: { capture: '1' } });
   if (!process.argv.includes('--quick-capture')) mainWindow.show();
   tray = new Tray(trayIcon()); tray.setToolTip('拾光提醒 · Ctrl+Shift+Space 快速记录');
   tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开拾光提醒', click: showMain }, { label: '快速记录', click: capture }, { type: 'separator' }, { label: '退出（停止提醒）', click: () => { quitting = true; app.quit(); } }]));
   tray.on('double-click', showMain);
-  registerShortcuts();
+  if (!exchangeTestMode) registerShortcuts();
   powerMonitor.on('resume', () => { checkDue(); void syncAll(); });
   resetPolling();
   setInterval(() => void checkDue(), 15000).unref();
   await checkDue();
-  if (!smoke) void syncAll();
+  if (!smoke && !exchangeTestMode) void syncAll();
   broadcast();
   if (process.argv.includes('--quick-capture')) capture();
 }
@@ -125,6 +128,7 @@ function registerIPC() {
     catch (error) { return { ok: false, error: error.name === 'ZodError' ? '输入格式无效，请检查日期、地址或必填项' : error.message || '操作失败' }; }
   });
   handle('snapshot', snapshot);
+  handle('test-exchange', input => testExchange(input));
   handle('analyze', async text => {
     if (previews.size > 100) previews.delete(previews.keys().next().value);
     const analysis = await analyze(text, { manual: true, model: config.value.model });

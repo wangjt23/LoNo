@@ -15,6 +15,7 @@
     "dist:win:signed": "electron-builder --config electron-builder.signed.cjs --win portable --x64"
   },
   "dependencies": {
+    "fast-xml-parser": "^5.11.2",
     "imapflow": "^2.10.0",
     "mailparser": "^3.9.0",
     "sql.js": "^1.13.0",

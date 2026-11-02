@@ -1,0 +1,21 @@
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { mkdtempSync } from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { validateEndpoint } from '../src/core/analyzer.js';
+
+const value = name => process.argv.find(arg => arg.startsWith(`--${name}=`))?.slice(name.length + 3) || '';
+const endpoint = validateEndpoint(value('endpoint'));
+const account = value('account');
+if (endpoint.protocol !== 'https:' || !account || account.length > 300) throw new Error('请提供 HTTPS EWS 地址和账号；此命令不接收密码');
+if (process.argv.some(arg => /^--(?:password|pass|secret)=/i.test(arg))) throw new Error('不要通过命令行传递密码，请在本机窗口输入');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const runtime = createRequire(import.meta.url)('electron');
+const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
+const profile = mkdtempSync(path.join(os.tmpdir(), 'shiguang-exchange-test-'));
+const child = spawn(runtime, [root, `--data-dir=${profile}`, '--exchange-test', `--endpoint=${endpoint.href}`, `--account=${account}`], { cwd: root, env, detached: true, stdio: 'ignore', windowsHide: true });
+child.on('error', () => { console.error('Exchange 测试窗口启动失败'); process.exitCode = 1; });
+child.unref();
+console.log('Exchange 本机测试窗口已启动；密码仅在窗口中输入，不写入设置文件。');
