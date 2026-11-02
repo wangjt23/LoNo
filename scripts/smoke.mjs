@@ -71,6 +71,16 @@ try {
     assert.equal(Boolean(identity.args), !identity.packaged);
   }
   await main.getByRole('heading', { name: '提醒总览' }).waitFor();
+  await main.evaluate(() => { const probe=document.createElement('div'); probe.id='scroll-probe'; probe.style.height='1800px'; document.querySelector('#workspace').append(probe); });
+  assert.equal(await main.evaluate(()=>document.documentElement.clientWidth===innerWidth),true,'document scrollbar takes no width');
+  assert.equal(await main.evaluate(()=>getComputedStyle(document.documentElement).scrollbarWidth),'none');
+  await main.mouse.move(1000,500); await main.mouse.wheel(0,400);
+  await main.waitForFunction(()=>scrollY>0);
+  const wheelPosition=await main.evaluate(()=>scrollY);
+  await main.keyboard.press('PageDown');
+  await main.waitForFunction(before=>scrollY>before,wheelPosition);
+  assert.equal(await main.locator('.topbar').evaluate(el=>Math.round(el.getBoundingClientRect().top)),0,'window controls header stays at the top');
+  await main.evaluate(()=>{document.querySelector('#scroll-probe').remove();scrollTo(0,0)});
   if (process.platform==='win32') {
     assert.equal(await main.evaluate(()=>navigator.windowControlsOverlay?.visible),true,'native caption controls remain available over content');
     assert.equal(await main.locator('.topbar').evaluate(el=>getComputedStyle(el).webkitAppRegion),'drag');
@@ -113,10 +123,10 @@ try {
   await capture.locator('#capture-text').press('Enter');
   await capture.locator('#capture-save-form').waitFor();
   await capture.screenshot({ path: path.join(artifacts, '02-capture.png') });
-  await capture.locator('#capture-text').press('Control+Enter');
+  await capture.locator('#capture-text').press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
   await main.locator('.task-row').waitFor();
   assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('capture=1')).isVisible()), false, 'saving dismisses the capture window');
-  await main.keyboard.press('Control+f');
+  await main.keyboard.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f');
   assert.equal(await main.locator('#search').evaluate(el => el === document.activeElement), true);
   await main.locator('#search').fill('不匹配的搜索词');
   assert.equal(await main.locator('.task-row').count(), 0);

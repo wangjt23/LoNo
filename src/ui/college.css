@@ -41,6 +41,10 @@ nav button.active b { color: #98647f; }
 }
 .topbar { background: #ffffff27; border-color: #881e5509; }
 .topbar { -webkit-app-region: drag; padding-right: 160px; }
+.topbar { position: sticky; top: 0; z-index: 5; backdrop-filter: blur(24px); }
+/* Hide the document scrollbar without disabling wheel, touch or keyboard scrolling. */
+html, body { scrollbar-width: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .topbar button, .topbar a, .topbar input { -webkit-app-region: no-drag; }
 .breadcrumb b { color: #77646f; }
 h1 { color: var(--college-ink); font-weight: 650; letter-spacing: -.7px; }

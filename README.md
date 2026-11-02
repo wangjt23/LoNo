@@ -1,16 +1,16 @@
 # LoNo / Loop Notify
 
-Windows 优先、可迁移 macOS/Linux 的本地智能提醒应用。详细设计和后续路线见 [PLAN.md](PLAN.md)。
+本地智能提醒应用，提供 Windows 打包和 macOS DMG 构建配置。macOS 尚待构建及实机验收，构建方法见 [MACOS.md](MACOS.md)。详细设计和后续路线见 [PLAN.md](PLAN.md)。
 
 ## 下载与安装
 
-从 [GitHub Releases](https://github.com/wangjt23/LoNo/releases) 下载 Windows x64 预发布版。免安装版为 `LoNo-0.3.1-win-x64.zip`，解压后保留完整文件夹并运行 LoNo.exe；安装版为 `LoNo-Setup-0.3.1-win-x64.exe`，提供安装目录选择和卸载入口。两种方式沿用相同的本地数据目录，卸载默认保留记录。请先退出旧版再更新。
+从 [GitHub Releases](https://github.com/wangjt23/LoNo/releases) 下载 Windows x64 预发布版。免安装版为 `LoNo-0.3.2-win-x64.zip`，解压后保留完整文件夹并运行 LoNo.exe；安装版为 `LoNo-Setup-0.3.2-win-x64.exe`，提供安装目录选择和卸载入口。两种方式沿用相同的本地数据目录，卸载默认保留记录。请先退出旧版再更新。
 
-当前均未获得可信代码签名。部分 SmartScreen 提示可能提供「更多信息 → 仍要运行」，但智能应用控制/企业应用控制策略没有同样的放行入口。0.3.1免安装目录版已通过本机桌面测试；此前0.2.10安装器被本机应用控制策略阻止，0.3.1安装器尚未完成安装/卸载验收。不要把文件生成成功理解为所有电脑都可安装。详见 [WINDOWS-SIGNING.md](WINDOWS-SIGNING.md)。
+当前均未获得可信代码签名。部分 SmartScreen 提示可能提供「更多信息 → 仍要运行」，但智能应用控制/企业应用控制策略没有同样的放行入口。0.3.2免安装目录版已通过本机桌面测试；此前0.2.10安装器被本机应用控制策略阻止，0.3.2安装器尚未完成安装/卸载验收。不要把文件生成成功理解为所有电脑都可安装。详见 [WINDOWS-SIGNING.md](WINDOWS-SIGNING.md)。
 
 ## 使用
 
-当前源码版本为 **0.3.1**，包含 Exchange 定时同步、工作记忆和 DeepSeek 官方配置入口。更新时先从托盘退出旧版，再启动新版；本地数据库自动迁移。本机推荐使用桌面「LoNo」或 release/LoNo-0.3.1/LoNo.exe，并保留整个文件夹。旧版0.2.1便携启动器已被用户的Smart App Control阻止，不作为推荐入口。目录版在本机通过测试，但没有获得正式代码签名；其他机器仍需独立验证。详见 [VALIDATION.md](VALIDATION.md)。
+当前源码版本为 **0.3.2**，包含 Exchange 定时同步、工作记忆和 DeepSeek 官方配置入口。更新时先从托盘退出旧版，再启动新版；本地数据库自动迁移。本机推荐使用桌面「LoNo」或 release/LoNo-0.3.2/LoNo.exe，并保留整个文件夹。旧版0.2.1便携启动器已被用户的Smart App Control阻止，不作为推荐入口。目录版在本机通过测试，但没有获得正式代码签名；其他机器仍需独立验证。详见 [VALIDATION.md](VALIDATION.md)。
 
 1. 点击「快速记录」，或按 **Ctrl + Shift + Space** 唤起置顶输入窗口。
 2. 在 Spotlight 风格输入栏中输入「明天下午三点提醒我提交材料，提前半小时提醒」，按 **Enter** 或点击右侧箭头。
@@ -141,7 +141,7 @@ Authorization: Bearer <bridge-token>
 
 「导出记录」包含全部事项及来源，不包含连接密钥；导出是 JSON 归档，首版没有通用备份恢复 UI。完整恢复应在退出应用后备份/还原整个数据目录，系统凭据可能无法跨账号/设备解密。不要将数据库、配置或导出文件提交到 Git。
 
-仓库使用 Git 分阶段提交，远程仓库为 https://github.com/wangjt23/LoNo 。`package-lock.json` 固定依赖；运行数据、凭据、截图和构建产物均忽略。Windows 便携包尚未进行代码签名。macOS/Linux 配置已预留，但尚未在对应系统验证。
+仓库使用 Git 分阶段提交，远程仓库为 https://github.com/wangjt23/LoNo 。`package-lock.json` 固定依赖；运行数据、凭据、截图和构建产物均忽略。Windows 便携包尚未进行代码签名。macOS 已提供双架构 DMG 配置和 GitHub Actions 构建流程，尚待对应系统验证，参见 [MACOS.md](MACOS.md)；Linux 配置仍为预留。
 
 ## 验证边界
 
@@ -194,7 +194,7 @@ DeepSeek 官方预设：完整地址 https://api.deepseek.com/chat/completions�
 
 新增「已过期」导航，显示超过截止时间且未完成的事项；今日安排不包含过期或已完成事项。完成后从过期列表移出，总览保留记录。
 
-目录版构建输出为 release/LoNo-0.3.1/LoNo.exe，并附带 LoNo.ico 用于桌面图标。请保留整个文件夹。
+目录版构建输出为 release/LoNo-0.3.2/LoNo.exe，并附带 LoNo.ico 用于桌面图标。请保留整个文件夹。
 
 ## 0.2.5 启动稳定性
 
@@ -242,4 +242,8 @@ DeepSeek 官方预设：完整地址 https://api.deepseek.com/chat/completions�
 
 Windows默认入口优先使用已安装副本，运行时重新修复原生通知注册可能覆盖的快捷方式图标。桌面测试使用独立通知替身，不再初始化用户系统中的原生通知注册；同一AppID的历史Electron别名仅做本地备份。
 
-最终0.3.1采用标准LoNo主程序，应用版本与EXE文件属性均为0.3.1。本机在用户自行关闭智能应用控制后完成最终目录EXE全流程验证；其他机器仍可能因未签名被拦截。调试期间曾验证复用旧运行时的备用方案，但未作为本次最终发布。package-folder.mjs保留--runtime-from及--runtime-sha256显式复用选项，缺少或不匹配校验值会拒绝打包。
+最终0.3.2采用标准LoNo主程序，应用版本与EXE文件属性均为0.3.2。本机在用户自行关闭智能应用控制后完成最终目录EXE全流程验证；其他机器仍可能因未签名被拦截。调试期间曾验证复用旧运行时的备用方案，但未作为本次最终发布。package-folder.mjs保留--runtime-from及--runtime-sha256显式复用选项，缺少或不匹配校验值会拒绝打包。
+
+## 滚动外观（0.3.2）
+
+隐藏主页面右侧原生滚动条的轨道与箭头，滚轮、触控板及键盘仍按原方式滚动。顶部控制区域固定，长列表滚动时保持窗口按钮所在区域清晰。内部原文和聊天区域继续独立滚动。
