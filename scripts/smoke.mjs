@@ -22,6 +22,7 @@ async function mainPage(app) {
 }
 let bridgeCalls = 0, modelCalls = 0, modelDelay = 0, failReview = false, noActionReview = false;
 const summaryFixture = { overview: '请提交项目材料，并核对相关要求。', keyPoints: ['行动：提交项目材料。', '时间：以原始通知为准。', '要求：核对材料清单。'] };
+const batchFields=(index,prefix='课程')=>{const time=new Date();time.setDate(time.getDate()+index+2);time.setHours(14,30,0,0);return {title:prefix+' '+(index+1)+' · B401 自备电脑',dueAt:time.toISOString(),remindAt:time.toISOString(),priority:'medium'};};
 const server = http.createServer((req, res) => {
   res.setHeader('Content-Type', 'application/json');
   if (req.url.startsWith('/messages')) {
@@ -34,12 +35,20 @@ const server = http.createServer((req, res) => {
       if (payload.messages[0].content.startsWith('你是LoNo工作助理')) {
         const user = [...payload.messages].reverse().filter(m => m.role === 'user').map(m => { try { return JSON.parse(m.content).message; } catch { return null; } }).find(Boolean);
         let answer;
-        if (user.includes('请记住')) answer = {reply:'我已提炼为候选记忆，请确认后记住。',memories:[{kind:'preference',content:'我习惯重要会议提前一天提醒',evidence:'我习惯重要会议提前一天提醒'}]};
+        if(user.includes('批量创建课程')) answer={reply:'已整理四条课程提醒，请统一确认。',changes:[0,1,2,3].map(i=>({action:'create',fields:batchFields(i,'Agent课程'),evidence:'批量创建课程'}))};
+        else if(user.includes('删除这些Agent课程')) {
+          const results=JSON.parse(payload.messages.at(-1).content).LOCAL_QUERY_RESULT;
+          answer=!results?{calls:[{type:'search',scope:'tasks',query:'Agent课程'}]}:results[0].items?{calls:results[0].items.slice(0,2).map(t=>({type:'read',scope:'tasks',id:t.id}))}:{reply:'删除其中两条课程，原文保留，请确认。',changes:results.map(r=>({action:'delete',taskId:r.record.id}))};
+        }
+        else if (user.includes('请记住')) answer = {reply:'我已提炼为候选记忆，请确认后记住。',memories:[{kind:'preference',content:'我习惯重要会议提前一天提醒',evidence:'我习惯重要会议提前一天提醒'}]};
         else {
           const last = JSON.parse(payload.messages.at(-1).content).LOCAL_QUERY_RESULT?.[0];
           answer = !last ? {calls:[{type:'search',scope:'tasks',query:'审核后提交材料'}]} : last.items ? {calls:[{type:'read',scope:'tasks',id:last.items[0].id}]} : {reply:'找到提交材料的记录，建议改为低优先级，等待你确认。',changes:[{taskId:last.record.id,action:'edit',fields:{title:last.record.title,dueAt:last.record.dueAt,remindAt:last.record.remindAt,priority:'low'}}]};
         }
         res.end(JSON.stringify({choices:[{message:{content:JSON.stringify(answer)}}]}));return;
+      }
+      if(payload.messages[0].content.startsWith('你是LoNo快捷输入整理器')&&payload.messages[1].content.includes('批量课表提交测试')) {
+        res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({tasks:[0,1,2,3].map(i=>({...batchFields(i,'快捷课程'),shouldRemind:true,confidence:.95,reason:'课表每节课独立提醒，B401，自备电脑。'}))})}}]}));return;
       }
       assert.ok(payload.messages[1].content.includes('提交'));
       const due = new Date(Date.now() + 86400000).toISOString();
@@ -390,7 +399,7 @@ try {
   await main.locator('#toast').evaluate(el=>el.className='');
   await main.screenshot({ path: path.join(artifacts, '09-agent-chat.png') });
   await main.locator('[data-action="chat-apply"]').click();
-  await main.getByText('修改已保存',{exact:true}).waitFor();
+  await main.getByText('操作已保存',{exact:true}).waitFor();
   assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t=>t.id===summaryTask.id).priority,'low');
   await main.locator('#chat-input').fill('我习惯重要会议提前一天提醒，请记住');
   await main.locator('#chat-input').press('Enter');
@@ -544,7 +553,42 @@ try {
   assert.equal(await memoryRestarted.locator('.record .source-label').textContent(),'邮件 · mail1');
   await memoryRestarted.getByRole('button',{name:'显示全部来源',exact:true}).click();
   assert.ok(await memoryRestarted.locator('.record').count()>1);
+  // Multi-reminder capture: select a subset, edit one title, then commit once.
+  const countBeforeBatch=(await memoryRestarted.evaluate(()=>window.reminder.invoke('snapshot'))).tasks.length;
+  await memoryRestarted.locator('.new-button').click();
+  const batchCapture=app.windows().find(w=>w.url().includes('capture=1'));
+  await batchCapture.locator('#capture-text').fill('批量课表提交测试：四节课程，B401，自备电脑');
+  await batchCapture.locator('#analyze-button').click();
+  await batchCapture.locator('[data-capture-item="3"]').waitFor();
+  assert.equal(await batchCapture.locator('[data-capture-item]').count(),4);
+  assert.equal((await memoryRestarted.evaluate(()=>window.reminder.invoke('snapshot'))).tasks.length,countBeforeBatch,'preview creates nothing');
+  await batchCapture.locator('[data-capture-item="1"] [data-capture-select]').uncheck();
+  await batchCapture.locator('[data-capture-item="0"] [name="title"]').fill('快捷课程改名');
+  await batchCapture.locator('.capture-items').evaluate(el=>el.scrollTop=el.scrollHeight);
+  assert.ok(await batchCapture.locator('#capture-save-form button[type="submit"]').evaluate(el=>el.getBoundingClientRect().bottom<=innerHeight),'batch confirmation stays visible while list scrolls');
+  await batchCapture.screenshot({path:path.join(artifacts,'10-batch-capture.png')});
+  await batchCapture.locator('#capture-save-form button[type="submit"]').click();
+  await memoryRestarted.bringToFront();
+  await memoryRestarted.waitForFunction(async n=>(await window.reminder.invoke('snapshot')).tasks.length===n,countBeforeBatch+3);
+  assert.ok((await memoryRestarted.evaluate(()=>window.reminder.invoke('snapshot'))).tasks.some(t=>t.title==='快捷课程改名'));
+  // Agent can create four, dismiss as a batch, re-propose and confirm, then delete two.
+  await memoryRestarted.locator('[data-view="chat"]').click();
+  await memoryRestarted.locator('#chat-input').fill('批量创建课程，每节课一个提醒');await memoryRestarted.locator('#chat-input').press('Enter');
+  await memoryRestarted.locator('[data-action="chat-dismiss-all"]').waitFor();
+  await memoryRestarted.locator('[data-action="chat-dismiss-all"]').click();
+  assert.equal((await memoryRestarted.evaluate(()=>window.reminder.invoke('snapshot'))).tasks.length,countBeforeBatch+3);
+  await memoryRestarted.locator('#chat-input').fill('批量创建课程，每节课一个提醒');await memoryRestarted.locator('#chat-input').press('Enter');
+  await memoryRestarted.locator('[data-action="chat-apply-all"]').waitFor();
+  await memoryRestarted.screenshot({path:path.join(artifacts,'11-agent-batch-create.png')});
+  await memoryRestarted.locator('[data-action="chat-apply-all"]').click();
+  await memoryRestarted.waitForFunction(async n=>(await window.reminder.invoke('snapshot')).tasks.length===n,countBeforeBatch+7);
+  await memoryRestarted.locator('#chat-input').fill('删除这些Agent课程中的两条');await memoryRestarted.locator('#chat-input').press('Enter');
+  await memoryRestarted.getByRole('button',{name:'确认全部（含删除）',exact:true}).waitFor();
+  const beforeDelete=(await memoryRestarted.evaluate(()=>window.reminder.invoke('snapshot'))).records.length;
+  await memoryRestarted.getByRole('button',{name:'确认全部（含删除）',exact:true}).click();
+  await memoryRestarted.waitForFunction(async n=>(await window.reminder.invoke('snapshot')).tasks.length===n,countBeforeBatch+5);
+  assert.equal((await memoryRestarted.evaluate(()=>window.reminder.invoke('snapshot'))).records.length,beforeDelete,'deleting tasks retains source records');
   assert.deepEqual(errors, []);
   shellPaths.forEach((file,index)=>assert.equal((existsSync(file)?readFileSync(file).toString('base64'):null)===shellBefore[index],true,'desktop tests do not change real Windows shortcuts'));
-  console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, fresh capture on dismissal and late-response isolation, Agent chat query/edit/memory/restart, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication, memory review/source/recall/edit/search/add/delete/restart', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, fresh capture on dismissal and late-response isolation, Agent chat create/edit/delete/batch/memory/restart, multi-reminder capture selection/edit/save, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication, memory review/source/recall/edit/search/add/delete/restart', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
 } finally { if (app) await app.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

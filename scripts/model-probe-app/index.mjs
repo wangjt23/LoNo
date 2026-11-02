@@ -1,3 +1,4 @@
+import { analyzeCapture } from '../../src/core/capture-service.js';
 import { app, safeStorage } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -25,6 +26,24 @@ app.whenReady().then(async () => {
   let stage = 'config';
   try {
     const config = new Config(path.join(profile, 'settings.json'), safeStorage); await config.load();
+    if(process.argv.includes('--batch-actions-only')) {
+      const sample='课程安排（2026年）：10月28日14:30-15:30 昇腾AI基础软硬件平台；11月4日14:30-17:30 模型自动训练与推理；11月5日14:30-17:30 算子自动开发与优化；11月11日14:30-17:30 模型自动适配与调优；11月12日14:30-17:30 多卡并行的模型训推。地点：深圳河套学院B401。自备笔记本电脑。请给每节未来课程建一条提醒，上课时提醒。';
+      stage='capture-series';const capture=await analyzeCapture(sample,{model:config.value.model,now:new Date('2026-11-03T10:00:00+08:00')});
+      if(capture.tasks.length!==4||capture.tasks.some(t=>t.engine!=='model'))throw new Error('课表未拆分为4条模型提醒');
+      const expectedDates=['2026-11-04','2026-11-05','2026-11-11','2026-11-12'];
+      if(JSON.stringify(capture.tasks.map(t=>new Date(t.dueAt).toISOString().slice(0,10)).sort())!==JSON.stringify(expectedDates)||capture.tasks.some(t=>Date.parse(t.remindAt)!==Date.parse(t.dueAt)))throw new Error('课程日期或上课时提醒未准确保留');
+      const store=await Store.open(),chat=new ChatStore(store),agent=new ChatService(store,chat,()=>config.value.model,{now:()=>new Date('2026-11-03T10:00:00+08:00')});
+      stage='agent-create';await agent.send(sample);let message=chat.messages().at(-1);
+      if(message.actions.length!==4||message.actions.some(a=>a.action!=='create')||store.tasks().length!==0)throw new Error('未正确生成4条待确认创建建议');
+      if(JSON.stringify(message.actions.map(a=>new Date(a.fields.dueAt).toISOString().slice(0,10)).sort())!==JSON.stringify(expectedDates)||message.actions.some(a=>Date.parse(a.fields.remindAt)!==Date.parse(a.fields.dueAt)))throw new Error('Agent课程日期或上课时提醒未准确保留');
+      chat.resolveMessage(message.id,'apply');if(store.tasks().length!==4)throw new Error('创建确认失败');
+      stage='agent-edit';await agent.send('把11月4日那节课的标题末尾加上（测试），其余不变。');message=chat.messages().at(-1);
+      if(message.actions.length!==1||message.actions[0].action!=='edit')throw new Error('未生成编辑建议');chat.resolveMessage(message.id,'apply');
+      stage='agent-delete';await agent.send('删除11月12日那节课的事项，其余保留。');message=chat.messages().at(-1);
+      if(message.actions.length!==1||message.actions[0].action!=='delete')throw new Error('未生成删除建议');chat.resolveMessage(message.id,'apply');
+      if(store.tasks().length!==3||store.records().length!==4)throw new Error('删除后来源保留验证失败');
+      console.log(JSON.stringify({connected:true,syntheticInputOnly:true,captureReminders:4,agentConfirmedCreates:4,agentConfirmedEdits:1,agentConfirmedDeletes:1,sourceRecordsRetained:true}));store.close();app.quit();return;
+    }
     if (process.argv.includes('--chat-only') || process.argv.includes('--chat-followup-only')) {
       const store = await Store.open(), chat = new ChatStore(store);
       const {id} = store.ingest({text:'请提交合成测试项目报告'},analyzeLocal('请提交合成测试项目报告',new Date(),true));
@@ -75,5 +94,5 @@ app.whenReady().then(async () => {
     const real = row ? await analyze(row.text, { source: 'email', sender: row.sender, now: new Date(row.received_at), model: config.value.model }) : null;
     console.log(JSON.stringify({ connected: true, model: config.value.model.model, synthetic: { engine: result.engine, titleSummarized: result.title !== sample.split('\n')[0], title: result.title, dueAt: result.dueAt, remindAt: result.remindAt, priority: result.priority }, memoryExtraction: memory.engine, candidateCount: memory.memories.length, realEmail: real ? { engine: real.engine, validStructuredResult: !real.warning, shouldRemind: real.shouldRemind } : null }));
     app.quit();
-  } catch (error) { console.log(JSON.stringify({ connected: false, stage, errorType:error.name, detail:stage==='config'||/^(未正确|应先|Agent|模型未|模型请求|查询轮数)/.test(error.message)?error.message:undefined, message: '模型验证未完成；未输出密钥或邮件正文' })); app.exit(1); }
+  } catch (error) { console.log(JSON.stringify({ connected: false, stage, errorType:error.name, detail:process.argv.includes('--batch-actions-only')||stage==='config'||/^(未正确|应先|Agent|模型未|模型请求|查询轮数)/.test(error.message)?error.message:undefined, message: '模型验证未完成；未输出密钥或邮件正文' })); app.exit(1); }
 });

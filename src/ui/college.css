@@ -261,3 +261,19 @@ dialog::backdrop { background: #30202b28; }
 .task-panel.records { scroll-margin-top:80px; }
 
 .settings-save { display:flex; position:fixed; right:32px; bottom:24px; z-index:8; width:auto; padding:0; margin:0; background:transparent; border:0; border-radius:0; }
+
+/* Multi-reminder capture keeps the confirmation controls outside the scroll list. */
+[data-capture-item] { border:0; padding:0; margin:0; min-width:0; }
+.capture-batch .capture-items { max-height:calc(100dvh - 225px); overflow-y:auto; overscroll-behavior:contain; padding-right:3px; }
+.capture-batch [data-capture-item] { padding:12px 0; border-bottom:1px solid #881e5515; }
+.capture-batch legend { font-size:12px; color:#881e55; }
+.capture-batch legend label { display:flex; align-items:center; gap:8px; }
+.capture-batch input[type="checkbox"] { width:15px; height:15px; accent-color:#881e55; }
+.capture-note { font-size:11px; color:#887380; margin:8px 0; }
+.chat-batch-controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:12px 0; }
+.chat-batch-controls strong { font-size:12px; color:#881e55; }
+
+.chat-action dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 18px; }
+.chat-action dl > div { min-width:0; overflow-wrap:anywhere; }
+.chat-action dl > div:first-child { grid-column:1 / -1; }
+.chat-batch-controls { position:sticky; bottom:0; background:#fcf8fbeb; backdrop-filter:blur(16px); border-radius:12px; padding:12px; }

@@ -163,7 +163,7 @@ function openEdit(id) {
   $('#editor').innerHTML = `<form id="edit-form"><div class="dialog-header"><h2>提醒详情</h2><button type="button" class="secondary review-button" data-action="review-task" ${data.settings.model.enabled ? '' : 'disabled'} title="根据原文重新判断，不沿用旧分析">AI 整理</button><button type="button" class="close-button" data-action="close">×</button></div>${fieldsMarkup({ title: editing.title, dueAt: editing.due_at, remindAt: editing.remind_at, priority: editing.priority })}<div id="task-review" aria-live="polite"></div><div class="analysis-note"><strong>${a.engine === 'model' ? '模型分析' : '本地分析'}</strong><p>${esc(a.reason)}</p>${memoryContextMarkup(a)}${a.warning ? `<p class="warning">${esc(a.warning)}</p>` : ''}</div>${aiSummaryMarkup(editing.record_id, a)}<details class="original" open><summary>原始信息 · ${esc(sourceName(editing))} ${esc(editing.sender)}</summary><p class="raw-text">${esc(readableSource(editing.text))}</p></details><div class="button-row end">${editing.status !== 'done' ? '<button type="button" class="secondary" data-action="snooze-current">15 分钟后再提醒</button>' : ''}<button class="primary" type="submit">修改并保存</button></div></form>`;
   $('#editor').showModal();
 }
-function getTaskFields(form) { const f = new FormData(form); return { title: f.get('title'), priority: f.get('priority'), dueAt: iso(f.get('dueAt')), remindAt: iso(f.get('remindAt')) }; }
+function getTaskFields(form) { const value = name => form.querySelector('[name="'+name+'"]').value; return { title:value('title'),priority:value('priority'),dueAt:iso(value('dueAt')),remindAt:iso(value('remindAt')) }; }
 
 document.addEventListener('pointerdown', event => {
   const dialog=$('#editor'); editorBackdropDown=false;
@@ -208,7 +208,8 @@ document.addEventListener('click', async event => {
       $('#editor').innerHTML='<form id="clear-secret-form"><h2>确认清除已保存的凭据？</h2><p>确认后立即清除并暂停对应连接，不影响其他配置和历史记录。</p><div class="button-row end"><button type="button" class="secondary" data-action="close">取消</button><button type="submit" class="primary">确认清除</button></div></form>';$('#editor').showModal();
     }
     if (action === 'chat-example') { chatDraft = button.dataset.text; $('#chat-input').value = chatDraft; $('#chat-input').focus(); }
-    if (action === 'chat-apply' || action === 'chat-dismiss') { button.disabled = true; try { await api.invoke('chat-resolve', { id: button.dataset.id, decision: action === 'chat-apply' ? 'apply' : 'dismiss' }); await refresh(); await loadChat(); toast(action === 'chat-apply' ? '修改已保存' : '建议已忽略'); } finally { button.disabled = false; } }
+    if (action === 'chat-apply-all' || action === 'chat-dismiss-all') { button.disabled=true;try{await api.invoke('chat-resolve',{messageId:button.dataset.id,decision:action==='chat-apply-all'?'apply':'dismiss'});await refresh();await loadChat();toast(action==='chat-apply-all'?'全部操作已保存':'全部建议已忽略');}finally{button.disabled=false;} }
+    if (action === 'chat-apply' || action === 'chat-dismiss') { button.disabled = true; try { await api.invoke('chat-resolve', { id: button.dataset.id, decision: action === 'chat-apply' ? 'apply' : 'dismiss' }); await refresh(); await loadChat(); toast(action === 'chat-apply' ? '操作已保存' : '建议已忽略'); } finally { button.disabled = false; } }
     if (action === 'chat-source') { const record = await api.invoke('chat-source', button.dataset.id); $('#editor').innerHTML = '<div class="dialog-header"><h2>原始记录</h2><button class="close-button" data-action="close">×</button></div><p class="raw-text">' + esc(readableSource(record.text)) + '</p>'; $('#editor').showModal(); }
     if (action === 'memory-new') openMemory();
     if (action === 'memory-edit') openMemory(button.dataset.id);
@@ -271,7 +272,8 @@ document.addEventListener('click', async event => {
         preview = result;
         document.body.classList.add('has-preview');
         $('#capture-key-hint').innerHTML = '<kbd>↵</kbd> 添加 <span class="hint-divider">·</span> 点外部收起';
-        $('#capture-result').innerHTML = `<form id="capture-save-form"><div class="preview-heading"><span>提醒预览</span><span>${preview.remindAt ? '确认时间后添加' : '时间待确认'}</span></div>${fieldsMarkup(preview)}<details class="analysis-note"><summary>分析依据</summary><p>${esc(preview.reason)}</p>${memoryContextMarkup(preview)}</details>${preview.warning ? `<p class="warning">${esc(preview.warning)}</p>` : ''}<div class="spotlight-save-row"><span>${preview.remindAt ? dateText(preview.remindAt) : '可稍后补充时间'}</span><button type="submit" class="primary">${preview.remindAt ? '添加提醒' : '保存待确认'} <span class="button-shortcut">↵</span></button></div></form>`;
+        const multiple=preview.tasks.length>1;
+        $('#capture-result').innerHTML = '<form id="capture-save-form" class="'+(multiple?'capture-batch':'')+'"><div class="preview-heading"><span>'+ (multiple?preview.tasks.length+' 条提醒预览':'提醒预览')+'</span><span>'+(multiple?'勾选需要的条目，可逐条修改':'确认时间后添加')+'</span></div><div class="capture-items">'+preview.tasks.map((item,index)=>'<fieldset data-capture-item="'+index+'">'+(multiple?'<legend><label><input type="checkbox" data-capture-select checked>第 '+(index+1)+' 项</label></legend>':'')+fieldsMarkup(item)+'<details class="analysis-note"><summary>分析依据</summary><p>'+esc(item.reason)+'</p>'+memoryContextMarkup(item)+'</details></fieldset>').join('')+'</div>'+(preview.skippedPast?'<p class="capture-note">已跳过 '+preview.skippedPast+' 个过去的场次。</p>':'')+(preview.warning?'<p class="warning">'+esc(preview.warning)+'</p>':'')+'<div class="spotlight-save-row"><span>'+(multiple?'仅保存勾选的提醒':preview.remindAt?dateText(preview.remindAt):'可稍后补充时间')+'</span><button type="submit" class="primary">'+(multiple?'确认添加所选提醒':preview.remindAt?'添加提醒':'保存待确认')+' <span class="button-shortcut">↵</span></button></div></form>';
         await api.invoke('capture-layout', 'preview');
       } catch (error) { if (session === captureSession) throw error; }
       finally { if (session === captureSession) { busy = false; button.disabled = false; button.innerHTML = icon('arrow'); button.setAttribute('aria-label', '分析提醒'); } }
@@ -329,7 +331,9 @@ document.addEventListener('submit', async event => {
     if (form.id === 'capture-save-form') {
       if (!preview) throw new Error('请先分析输入内容');
       $('#capture-text').disabled = true; $('#analyze-button').disabled = true;
-      await api.invoke('save-capture', { token: preview.token, fields: getTaskFields(form) });
+      const items=[...form.querySelectorAll('[data-capture-item]')].filter(el=>!el.querySelector('[data-capture-select]')||el.querySelector('[data-capture-select]').checked).map(el=>({index:Number(el.dataset.captureItem),fields:getTaskFields(el)}));
+      if(!items.length)throw new Error('请至少勾选一条提醒');
+      await api.invoke('save-capture', { token: preview.token, items });
       if (formSession !== captureSession) return;
       preview = null; $('#app').innerHTML = captureMarkup(); document.body.classList.remove('has-preview');
       await api.invoke('capture-layout', 'input'); await api.invoke('hide-capture');

@@ -31,13 +31,31 @@ export class ChatStore {
     });
   }
   resolve(id, decision) {
+    return this.resolveRows('id', id, decision);
+  }
+  resolveMessage(messageId, decision) {
+    return this.resolveRows('message_id', messageId, decision);
+  }
+  resolveRows(column, id, decision) {
     if (!['apply', 'dismiss'].includes(decision)) throw new Error('无效的处理方式');
+    if (typeof id !== 'string' || id.length > 100) throw new Error('建议标识无效');
     return this.store.transaction(() => {
-      const row = this.store.all('SELECT * FROM chat_actions WHERE id=?', [id])[0];
-      if (!row || row.status !== 'pending') throw new Error('建议已处理或不存在');
-      const action = JSON.parse(row.payload);
-      if (decision === 'apply') this.store.mutateTask(action.taskId, action.action, action.fields, action.revision);
-      this.store.db.run('UPDATE chat_actions SET status=? WHERE id=?', [decision === 'apply' ? 'applied' : 'dismissed', id]);
+      const rows = this.store.all('SELECT * FROM chat_actions WHERE '+column+"=? AND status='pending' ORDER BY rowid", [id]);
+      if (!rows.length) throw new Error('建议已处理或不存在');
+      for (const row of rows) {
+        const action = JSON.parse(row.payload);
+        if (decision === 'apply') {
+          if (action.action === 'create') {
+            if (this.store.duplicateTask(action.fields)) throw new Error('已存在相同标题和时间的提醒，请忽略重复建议后再确认');
+            const result = this.store.mutateIngest({key:'chat-create:'+action.taskId,source:'chat',sender:'LoNo Agent',text:action.sourceText}, {...action.fields,shouldRemind:true,confidence:1,reason:'聊天中提出，经用户确认创建。',engine:'model'}, action.fields, false);
+            if (result.duplicate) throw new Error('这条创建建议已经保存');
+            action.taskId=result.id;
+            this.store.db.run('UPDATE chat_actions SET payload=? WHERE id=?',[JSON.stringify(action),row.id]);
+          } else this.store.mutateTask(action.taskId, action.action, action.fields, action.revision);
+        }
+        this.store.db.run('UPDATE chat_actions SET status=? WHERE id=?', [decision === 'apply' ? 'applied' : 'dismissed', row.id]);
+      }
+      return {count:rows.length};
     });
   }
 }

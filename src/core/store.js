@@ -1,3 +1,4 @@
+import { taskIdentity } from './task-identity.js';
 import initSqlJs from 'sql.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,23 +55,30 @@ export class Store {
   setState(key, value) { return this.transaction(() => this.db.run('INSERT OR REPLACE INTO state VALUES (?,?)', [key, JSON.stringify(value)])); }
   assignLegacyMail(account) { if(account?.id==='legacy-mail' && this.all("SELECT id FROM records WHERE source='email' AND account_id='' LIMIT 1").length) this.transaction(()=>this.db.run("UPDATE records SET account_id=?,account_alias=? WHERE source='email' AND account_id=''",[account.id,account.alias])); }
   hasRecord(key) { return Boolean(this.all('SELECT id FROM records WHERE external_key=?', [key])[0]); }
-  ingest({ key = null, source = 'manual', sender = '', accountId = '', accountAlias = '', text, receivedAt = new Date().toISOString() }, analysis, override, memoryCandidates) {
+  ingest(message, analysis, override, memoryCandidates) {
+    if (message.key && this.hasRecord(message.key)) return { duplicate: true };
+    return this.transaction(() => this.mutateIngest(message, analysis, override, memoryCandidates));
+  }
+  // Shared insertion path; batch capture and chat confirmations own the transaction.
+  mutateIngest({ key = null, source = 'manual', sender = '', accountId = '', accountAlias = '', text, receivedAt = new Date().toISOString() }, analysis, override, memoryCandidates) {
     if (key && this.hasRecord(key)) return { duplicate: true };
     const fields = taskInput.parse(override || analysis);
     if (fields.remindAt && fields.dueAt && Date.parse(fields.remindAt) > Date.parse(fields.dueAt)) throw new Error('提醒时间不能晚于截止时间');
-    return this.transaction(() => {
-      const recordId = randomUUID(); const id = randomUUID(); const now = new Date().toISOString();
-      this.db.run('INSERT INTO records (id,external_key,source,sender,text,received_at,analysis,account_id,account_alias) VALUES (?,?,?,?,?,?,?,?,?)', [recordId, key, source, sender, text, receivedAt, JSON.stringify(analysis), accountId, accountAlias]);
-      if (memoryCandidates !== false) {
-        this.insertMemoryCandidates(recordId, extractLocalMemories(text));
-        if (memoryCandidates) this.insertMemoryCandidates(recordId, memoryCandidates);
-      }
-      if (analysis.shouldRemind) {
-        const status = fields.remindAt && analysis.confidence >= 0.7 && (!fields.dueAt || Date.parse(fields.dueAt) > Date.now()) ? 'pending' : 'review';
-        this.db.run('INSERT INTO tasks (id,record_id,title,due_at,remind_at,priority,status,notified_at,created_at,completed_at) VALUES (?,?,?,?,?,?,?,?,?,?)', [id, recordId, fields.title, fields.dueAt, fields.remindAt, fields.priority, override && fields.remindAt ? 'pending' : status, null, now, null]);
-      }
-      return { id: analysis.shouldRemind ? id : null, recordId, duplicate: false };
-    });
+    const recordId = randomUUID(); const id = randomUUID(); const now = new Date().toISOString();
+    this.db.run('INSERT INTO records (id,external_key,source,sender,text,received_at,analysis,account_id,account_alias) VALUES (?,?,?,?,?,?,?,?,?)', [recordId, key, source, sender, text, receivedAt, JSON.stringify(analysis), accountId, accountAlias]);
+    if (memoryCandidates !== false) {
+      this.insertMemoryCandidates(recordId, extractLocalMemories(text));
+      if (memoryCandidates) this.insertMemoryCandidates(recordId, memoryCandidates);
+    }
+    if (analysis.shouldRemind) {
+      const status = fields.remindAt && analysis.confidence >= 0.7 && (!fields.dueAt || Date.parse(fields.dueAt) > Date.now()) ? 'pending' : 'review';
+      this.db.run('INSERT INTO tasks (id,record_id,title,due_at,remind_at,priority,status,notified_at,created_at,completed_at) VALUES (?,?,?,?,?,?,?,?,?,?)', [id, recordId, fields.title, fields.dueAt, fields.remindAt, fields.priority, override && fields.remindAt ? 'pending' : status, null, now, null]);
+    }
+    return { id: analysis.shouldRemind ? id : null, recordId, duplicate: false };
+  }
+  duplicateTask(fields) {
+    const key = taskIdentity(fields);
+    return this.tasks().find(t => taskIdentity({title:t.title,dueAt:t.due_at,remindAt:t.remind_at,priority:t.priority}) === key);
   }
   tasks() { return this.all(`SELECT t.*, r.source, r.account_id, r.account_alias, r.sender, r.text, r.analysis FROM tasks t JOIN records r ON r.id=t.record_id ORDER BY CASE status WHEN 'review' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, COALESCE(remind_at,'9999'), created_at DESC`); }
   recordsForAccount(id) { return this.all('SELECT * FROM records WHERE account_id=? ORDER BY received_at DESC LIMIT 100',[id]); }
@@ -153,6 +161,7 @@ export class Store {
     const current = this.all('SELECT * FROM tasks WHERE id=?', [id])[0];
     if (!current) throw new Error('找不到提醒');
     if (expectedRevision !== undefined && current.revision !== expectedRevision) throw new Error('记录已被修改，请让 Agent 重新查询后再操作');
+    if (action === 'delete') { this.db.run('DELETE FROM tasks WHERE id=?', [id]); return; }
     if (action === 'complete') this.db.run("UPDATE tasks SET status='done', completed_at=? WHERE id=?", [new Date().toISOString(), id]);
     else if (action === 'restore') this.db.run("UPDATE tasks SET status=CASE WHEN remind_at IS NULL THEN 'review' ELSE 'pending' END, completed_at=NULL, notified_at=NULL WHERE id=?", [id]);
     else if (action === 'snooze') this.db.run("UPDATE tasks SET remind_at=?, status='pending', notified_at=NULL WHERE id=?", [new Date(Date.now() + 15 * 60000).toISOString(), id]);

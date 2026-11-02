@@ -3,7 +3,7 @@ import { release } from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { CaptureService } from './core/capture-service.js';
 import { analyze } from './core/analyzer.js';
 import { Store } from './core/store.js';
 import { Config } from './core/config.js';
@@ -41,8 +41,8 @@ let shortcutOK = false, startupWarning = '', notificationWarning = '', notificat
 let shortcutState = { keys: [], active: null }, shortcutWarning = '', lastShortcutAt = 0;
 let captureBlurTimer;
 let startupPhase = 'data', captureReady = false, captureLoading = null, captureWarning = '';
-const previews = new Map();
-let messages, taskReviews, chatStore, chatAgent;
+
+let messages, taskReviews, chatStore, chatAgent, captures;
 const notifications = new Set();
 const syncStatus = { email: { state: 'idle', message: '尚未同步' }, wecom: { state: 'idle', message: '尚未同步' } };
 
@@ -169,6 +169,7 @@ async function start() {
   taskReviews = new TaskReviewService(store, () => config.value.model);
   chatStore = new ChatStore(store);
   chatAgent = new ChatService(store, chatStore, () => config.value.model);
+  captures = new CaptureService(store, () => config.value);
   startupPhase = 'windows';
   mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: 'LoNo · Loop Notify', show: false, ...(['win32', 'darwin'].includes(process.platform) ? { titleBarStyle: 'hidden' } : {}), ...(process.platform === 'win32' ? { titleBarOverlay: { color: '#00000000', symbolColor: '#65505d', height: 42 } } : {}), ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 18, y: 22 } } : {}) }));
   if (process.platform === 'win32') {
@@ -222,7 +223,7 @@ function registerIPC() {
   handle('snapshot', snapshot);
   handle('chat-history', () => chatStore.messages());
   handle('chat-send', async text => { try { return await chatAgent.send(text); } finally { broadcast(); } });
-  handle('chat-resolve', ({ id, decision }) => { chatStore.resolve(id, decision); broadcast(); void checkDue(); });
+  handle('chat-resolve', ({ id, messageId, decision }) => { if(messageId)chatStore.resolveMessage(messageId, decision);else chatStore.resolve(id, decision); broadcast(); void checkDue(); });
   handle('chat-source', id => { if (typeof id !== 'string' || id.length > 100) throw new Error('来源标识无效'); const record = store.record(id); if (!record) throw new Error('找不到原始记录'); return record; });
   handle('review-task', id => taskReviews.preview(id));
   handle('apply-task-review', input => { taskReviews.apply(input); broadcast(); void checkDue(); });
@@ -275,17 +276,9 @@ function registerIPC() {
     const key = accountStateKey(config.value.mail); store.setState(key, { ...store.state(key, {}), authPaused: false });
     resetPolling(); broadcast(); await syncAll(); return syncStatus.email;
   });
-  handle('analyze', async text => {
-    if (previews.size > 100) previews.delete(previews.keys().next().value);
-    const analysis = await analyze(text, { manual: true, model: config.value.model, memories: typeof text === 'string' ? store.recall(text) : [] });
-    const token = randomUUID(); previews.set(token, { text: text.trim(), analysis, expires: Date.now() + 30 * 60000 });
-    return { token, ...analysis };
-  });
-  handle('save-capture', ({ token, fields }) => {
-    const preview = previews.get(token);
-    if (!preview || preview.expires < Date.now()) throw new Error('分析已过期，请重新分析');
-    const result = store.ingest({ text: preview.text }, preview.analysis, fields);
-    previews.delete(token); broadcast(); void checkDue(); return result;
+  handle('analyze', text => captures.preview(text));
+  handle('save-capture', input => {
+    const result=captures.save(input); broadcast(); void checkDue(); return result;
   });
   handle('update-task', ({ id, action, fields }) => { store.updateTask(id, action, fields); broadcast(); void checkDue(); });
   handle('save-settings', async input => {
