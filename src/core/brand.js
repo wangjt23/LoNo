@@ -36,3 +36,16 @@ export function brandIco(size = 48) {
   header.writeUInt32LE(dib.length, 14); header.writeUInt32LE(22, 18);
   return Buffer.concat([header, dib]);
 }
+
+export function brandIconSet() {
+  const images = [16, 24, 32, 48, 64, 128, 256].map(size => brandIco(size));
+  const header = Buffer.alloc(6 + images.length * 16);
+  header.writeUInt16LE(1, 2); header.writeUInt16LE(images.length, 4);
+  let offset = header.length;
+  for (let i = 0; i < images.length; i++) {
+    images[i].copy(header, 6 + i * 16, 6, 22);
+    header.writeUInt32LE(offset, 6 + i * 16 + 12);
+    offset += images[i].length - 22;
+  }
+  return Buffer.concat([header, ...images.map(icon => icon.subarray(22))]);
+}

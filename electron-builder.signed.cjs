@@ -1,5 +1,5 @@
 // Separate release profile: never replace the existing unsigned development build.
-const { build } = require('./package.json');
+const build = require('./electron-builder.installer.cjs');
 const thumbprint = process.env.SHIGUANG_SIGNING_THUMBPRINT?.replace(/\s/g, '');
 const certificateLink = process.env.WIN_CSC_LINK || process.env.CSC_LINK;
 
@@ -20,6 +20,8 @@ module.exports = {
   directories: { ...build.directories, output: 'release-signed' },
   win: {
     ...build.win,
+    target: ['nsis', 'portable'],
+    icon: 'src/assets/LoNo.ico',
     signAndEditExecutable: true,
     signExecutable: true,
     signtoolOptions: {

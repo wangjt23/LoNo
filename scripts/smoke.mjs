@@ -46,6 +46,17 @@ try {
   app = await launch();
   const main = await mainPage(app);
   main.on('pageerror', error => errors.push(error.message));
+  if (process.platform === 'win32') {
+    const identity = await app.evaluate(({ app, shell }) => {
+      const link = shell.readShortcutLink(app.getPath('userData') + '/shell/LoNo.lnk');
+      return { appId: link.appUserModelId, iconPath: link.icon, target: link.target, args: link.args, packaged: app.isPackaged, executable: process.execPath };
+    });
+    assert.equal(identity.appId, 'com.shiguang.reminder');
+    assert.equal(existsSync(identity.iconPath), true);
+    assert.match(path.basename(identity.iconPath), /^lono-[a-f0-9]{12}\.ico$/);
+    assert.equal(identity.target, identity.executable);
+    assert.equal(Boolean(identity.args), !identity.packaged);
+  }
   await main.getByRole('heading', { name: '提醒总览' }).waitFor();
   assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).settings.pollMinutes, 10, 'new profiles poll every ten minutes');
   await main.screenshot({ path: path.join(artifacts, '01-empty.png') });

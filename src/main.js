@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, Notification, powerMonitor, safeStorage, dialog, screen, nativeTheme } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, Notification, powerMonitor, safeStorage, dialog, screen, nativeTheme, shell } from 'electron';
 import { release } from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -16,6 +16,7 @@ import { exchangeInput, exchangeRequestOptions } from './core/exchange.js';
 import { extractMemories } from './core/memory.js';
 import { MessageService } from './core/message-service.js';
 import { TaskReviewService } from './core/task-review-service.js';
+import { configureWindowsIdentity, WINDOWS_APP_ID, WINDOWS_TOAST_CLSID } from './windows-shell.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const smoke = process.argv.includes('--smoke');
@@ -25,7 +26,8 @@ const dataArg = process.argv.find(a => a.startsWith('--data-dir='));
 // The public brand can change without moving databases or OS-encrypted secrets.
 app.setPath('userData', dataArg ? path.resolve(dataArg.slice(11)) : path.join(app.getPath('appData'), 'shiguang-reminder'));
 app.setName('LoNo');
-app.setAppUserModelId('com.shiguang.reminder');
+app.setAppUserModelId(WINDOWS_APP_ID);
+if (process.platform === 'win32') app.setToastActivatorCLSID(WINDOWS_TOAST_CLSID);
 let mainWindow, captureWindow, tray, store, config, timer, quitting = false, syncing = false, captureExpanded = false;
 let shortcutOK = false, startupWarning = '', notificationWarning = '', notificationBusy = false;
 let shortcutState = { keys: [], active: null }, shortcutWarning = '', lastShortcutAt = 0;
@@ -130,6 +132,11 @@ async function start() {
   taskReviews = new TaskReviewService(store, () => config.value.model);
   startupPhase = 'windows';
   mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: 'LoNo · Loop Notify', show: false }));
+  if (process.platform === 'win32') {
+    try { await configureWindowsIdentity(mainWindow, { app, shell, isolated: smoke || exchangeTestMode || Boolean(dataArg) }); }
+    catch (error) { startupWarning = [startupWarning, `Windows 图标设置未完成：${error.message}`].filter(Boolean).join('；'); }
+  }
+  if (quitting) return;
   captureWindow = new BrowserWindow(windowOptions({ width: 680, height: 340, title: '快速记录 · LoNo', frame: false, hasShadow: true, roundedCorners: true, backgroundColor: '#f7f7f9', alwaysOnTop: true, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, show: false }));
   for (const win of [mainWindow, captureWindow]) { secureWindow(win); win.setMenuBarVisibility(false); }
   for (const win of [mainWindow, captureWindow]) applyMaterial(win);

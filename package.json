@@ -1,7 +1,7 @@
 {
   "name": "shiguang-reminder",
-  "version": "0.2.8",
-  "description": "本地优先的智能工作提醒助手",
+  "version": "0.2.11",
+  "description": "LoNo · 智能工作提醒助手",
   "author": "LoNo contributors",
   "private": true,
   "type": "module",
@@ -12,11 +12,12 @@
     "test:desktop": "node scripts/smoke.mjs",
     "pack": "electron-builder --dir",
     "dist:win": "electron-builder --win portable --x64",
-    "dist:win:signed": "electron-builder --config electron-builder.signed.cjs --win portable --x64",
+    "dist:win:signed": "electron-builder --config electron-builder.signed.cjs --win nsis portable --x64",
     "test:exchange": "node scripts/exchange-demo.mjs",
     "test:exchange:timer": "node scripts/exchange-demo.mjs --timer",
     "demo:record": "node scripts/exchange-demo.mjs --video --clean-video",
-    "demo:render": "node scripts/render-demo.mjs"
+    "demo:render": "node scripts/render-demo.mjs",
+    "dist:win:installer": "electron-builder --config electron-builder.installer.cjs --win nsis --x64"
   },
   "dependencies": {
     "fast-xml-parser": "^5.11.2",
@@ -48,7 +49,9 @@
     "asar": true,
     "win": {
       "target": "portable",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": true,
+      "signExecutable": false,
+      "icon": "src/assets/LoNo.ico"
     },
     "portable": {
       "artifactName": "LoNo-${version}-win-x64.exe"
