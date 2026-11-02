@@ -199,6 +199,18 @@ try {
   const beforeCancel=(await main.evaluate(()=>window.reminder.invoke('snapshot'))).tasks.find(t=>t.id===summaryTask.id);
   await main.locator(`[data-action="edit"][data-id="${summaryTask.id}"]`).first().click();
   await main.locator('#edit-form [name="title"]').fill('点外部应取消的修改');
+  const originalSource = await main.locator('#editor .raw-text').textContent();
+  await main.locator('#editor .raw-text').evaluate(el => { el.textContent = ('长邮件原文 https://example.com/' + 'a'.repeat(600) + '\n').repeat(30); });
+  assert.equal(await main.locator('#editor').evaluate(el => getComputedStyle(el).scrollbarWidth), 'none');
+  assert.equal(await main.locator('#editor .raw-text').evaluate(el => getComputedStyle(el).scrollbarWidth), 'none');
+  assert.equal(await main.locator('#editor').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'dialog has no horizontal overflow');
+  assert.equal(await main.locator('#editor .raw-text').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'long source URLs wrap');
+  await main.locator('#editor .raw-text').scrollIntoViewIfNeeded();
+  await main.locator('#editor .raw-text').hover();
+  await main.mouse.wheel(0, 300);
+  await main.waitForFunction(() => document.querySelector('#editor .raw-text').scrollTop > 0);
+  await main.screenshot({ path: path.join(artifacts, '08-hidden-dialog-scrollbars.png') });
+  await main.locator('#editor .raw-text').evaluate((el, text) => { el.textContent = text; el.scrollTop = 0; }, originalSource);
   await main.mouse.click(8,120);
   await main.waitForFunction(()=>!document.querySelector('#editor').open);
   assert.equal((await main.evaluate(()=>window.reminder.invoke('snapshot'))).tasks.find(t=>t.id===summaryTask.id).title,beforeCancel.title);

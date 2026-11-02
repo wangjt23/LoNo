@@ -42,9 +42,10 @@ nav button.active b { color: #98647f; }
 .topbar { background: #ffffff27; border-color: #881e5509; }
 .topbar { -webkit-app-region: drag; padding-right: 160px; }
 .topbar { position: sticky; top: 0; z-index: 5; backdrop-filter: blur(24px); }
-/* Hide the document scrollbar without disabling wheel, touch or keyboard scrolling. */
-html, body { scrollbar-width: none; }
-html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
+/* One policy for every scroll container, including dialogs, textareas and source text. */
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
+*::-webkit-scrollbar-button { display: none; }
 .topbar button, .topbar a, .topbar input { -webkit-app-region: no-drag; }
 .breadcrumb b { color: #77646f; }
 h1 { color: var(--college-ink); font-weight: 650; letter-spacing: -.7px; }
@@ -184,7 +185,7 @@ dialog::backdrop { background: #30202b28; }
 .chat-intro .chat-orbit { width: 28px; height: 28px; font-size: 23px; background: transparent; }
 .chat-intro small { display: none; }
 .chat-intro strong { font-size: 13px; font-weight: 550; color: #705b67; }
-.chat-scroll { padding: 22px max(28px, calc((100% - 860px) / 2)) 32px; scrollbar-width: thin; scrollbar-color: #b69aab66 transparent; }
+.chat-scroll { padding: 22px max(28px, calc((100% - 860px) / 2)) 32px; }
 .chat-message { max-width: 100%; margin-bottom: 32px; }
 .chat-message.user { width: fit-content; min-width: 60px; max-width: 78%; }
 .chat-message.user .chat-text { border-radius: 18px 18px 5px 18px; padding: 11px 17px; background: #eadde773; }
@@ -205,6 +206,10 @@ dialog::backdrop { background: #30202b28; }
 .memory-intro h3 { margin: 0 0 7px; font-size: 16px; font-weight: 550; }
 .memory-intro p, .memory-hint { margin: 0; font-size: 12px; color: #907b87; line-height: 1.7; }
 .memory-hint { margin: 12px 0 20px; }
+.form-grid, .review-proposal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#editor { overflow-x: hidden; }
+#editor form, #editor .original, #editor .ai-review, .review-proposal > div { min-width: 0; max-width: 100%; }
+.raw-text, .summary-overview, .summary-points, .review-reason, .review-proposal dd { overflow-wrap: anywhere; }
 .memory-suggestions { margin-top: 24px; border-top: 1px solid #881e5512; padding-top: 16px; }
 .memory-suggestions header { display: flex; align-items: center; gap: 12px; color: #947888; padding: 0 20px; }
 .memory-suggestions header h3 { font-size: 13px; font-weight: 550; margin: 0; }
