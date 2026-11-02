@@ -4,7 +4,7 @@ Windows 优先、可迁移 macOS/Linux 的本地智能提醒应用。详细设�
 
 ## 使用
 
-当前源码版本为 **0.2.1**，包含 Exchange 定时同步、工作记忆和 DeepSeek 官方配置入口。更新时先从托盘退出旧版，再启动新版；本地数据库自动迁移。Windows 便携包未签名，目标机器的执行策略验收见 [VALIDATION.md](VALIDATION.md)。
+当前源码版本为 **0.2.2**，包含 Exchange 定时同步、工作记忆和 DeepSeek 官方配置入口。更新时先从托盘退出旧版，再启动新版；本地数据库自动迁移。本机推荐使用桌面「学院工作助理（预览版）」或 release/College-Assistant-0.2.2/学院工作助理.exe，并保留整个文件夹。旧版0.2.1便携启动器已被用户的Smart App Control阻止，不作为推荐入口。目录版在本机通过测试，但没有获得正式代码签名；其他机器仍需独立验证。详见 [VALIDATION.md](VALIDATION.md)。
 
 1. 点击「快速记录」，或按 **Ctrl + Shift + Space** 唤起置顶输入窗口。
 2. 在 Spotlight 风格输入栏中输入「明天下午三点提醒我提交材料，提前半小时提醒」，按 **Enter** 或点击右侧箭头。
@@ -173,3 +173,9 @@ DeepSeek 官方预设：完整地址 https://api.deepseek.com/chat/completions�
 - npm run demo:render：Remotion 渲染1080p MP4和封面；首次可执行 node node_modules/@remotion/cli/remotion-cli.js browser ensure 下载渲染浏览器。
 
 输出位于 artifacts/demo（Git忽略）；可编辑 demo/index.jsx 和 scripts/exchange-demo.mjs。Remotion 的 [渲染文档](https://www.remotion.dev/docs/render) 提供更多导出选项。
+
+## 0.2.2 学院配色与目录发布
+
+配色读取自用户提供的学院PPT第一页对应的 slideLayout36，不使用文件附带的通用WPS主题色。精确装饰色：#881E55、#D14AA4、#E27DBE、#262626；正文规范#595959，白底标题规范#000000。界面采用深莓紫操作色、低浓度玫粉玻璃染色和深灰正文，保留系统 Acrylic / Vibrancy 与不透明、高对比回退。应用名称等待用户选定，未更改appId和数据目录。
+
+目录版构建：先运行 node node_modules/electron-builder/cli.js --dir --config.directories.output=.runtime/college-build，再运行 node scripts/package-folder.mjs。脚本拒绝覆盖已有版本目录，复制原版Electron运行时且不改动EXE字节，加入当前app.asar；不会创建新便携启动器或修改Windows控制策略。此方式不是CA代码签名，不能据此承诺其他电脑一定放行。

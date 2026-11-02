@@ -8,7 +8,7 @@ export function trayIcon() {
     const index = (y * size + x) * 4;
     if (r > 15) continue;
     const white = (r > 9 && r < 10.7) || (Math.abs(dx) < 1 && dy >= -6 && dy <= 1) || (dy >= 0 && dy <= 4 && Math.abs(dx - dy) < 1.3);
-    pixels[index] = white ? 255 : 65; pixels[index + 1] = white ? 255 : 105; pixels[index + 2] = white ? 255 : 225; pixels[index + 3] = 255;
+    pixels[index] = white ? 255 : 136; pixels[index + 1] = white ? 255 : 30; pixels[index + 2] = white ? 255 : 85; pixels[index + 3] = 255;
   }
   // Electron bitmap pixels use BGRA on Windows; swap R/B for the native bitmap.
   if (process.platform === 'win32') for (let i = 0; i < pixels.length; i += 4) { const r = pixels[i]; pixels[i] = pixels[i + 2]; pixels[i + 2] = r; }

@@ -1,0 +1,111 @@
+/* Palette transcribed from slide 1 / slideLayout36 in the supplied college PPT.
+   Exact reference colors stay separate from the derived translucent surfaces. */
+:root {
+  --college-ink: #262626;
+  --college-text: #595959;
+  --college-berry: #881e55;
+  --college-orchid: #d14aa4;
+  --college-rose: #e27dbe;
+  --blue: var(--college-berry);
+  --line: #881e5515;
+  --surface: #f8f4f7;
+  color: var(--college-ink);
+  font-family: 'HarmonyOS Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei UI', 'Segoe UI', sans-serif;
+}
+body { color: var(--college-ink); }
+button:focus-visible { outline-color: #d14aa466; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline-color: #d14aa430; border-color: var(--college-orchid); }
+input, textarea, select { color: var(--college-ink); }
+.sidebar {
+  background: linear-gradient(165deg, #fff9, #f5e6ef80 66%, #e27dbe20);
+  border-right: 1px solid #ffffffc2;
+  backdrop-filter: blur(36px) saturate(125%);
+}
+.brand { color: var(--college-ink); letter-spacing: .3px; }
+.brand-mark { color: var(--college-berry); background: #ffffffa8; border: 1px solid #ffffffea; box-shadow: 0 5px 16px #881e550a, inset 0 1px 0 #fff; }
+.brand small { color: #746b72; }
+.primary { background: var(--college-berry); box-shadow: inset 0 1px 0 #ffffff25, 0 4px 12px #881e5514; }
+.primary:hover { background: #731747; }
+.new-button { border-radius: 11px; }
+nav button { color: #665e64; }
+nav button svg { color: #8b7b86; }
+nav button.active { color: var(--college-berry); background: #ffffffa3; border: 1px solid #ffffffb0; box-shadow: 0 4px 16px #881e5508, inset 0 1px 0 #fff; }
+nav button.active svg { color: var(--college-berry); }
+nav button:hover { background: #ffffff73; }
+nav button.active b { color: #98647f; }
+.nav-caption { color: #8c7c87; letter-spacing: .5px; }
+.sidebar-footer { color: #80747c; }
+#workspace {
+  background: radial-gradient(ellipse at 100% 0, #e27dbe14, transparent 52%), linear-gradient(140deg, #ffffffc2, #fcf8fbd4);
+  box-shadow: inset 1px 0 0 #ffffffa6;
+}
+.topbar { background: #ffffff27; border-color: #881e5509; }
+.breadcrumb b { color: #77646f; }
+h1 { color: var(--college-ink); font-weight: 650; letter-spacing: -.7px; }
+.page-heading p { color: #81747c; }
+.task-panel, .settings-card, .connection-card {
+  background: linear-gradient(140deg, #ffffffa8, #ffffff78);
+  border: 1px solid #ffffffd6;
+  border-radius: 18px;
+  backdrop-filter: blur(22px) saturate(115%);
+  box-shadow: 0 8px 32px #5b254507, inset 0 1px 0 #fff;
+}
+.stats article { background: #ffffff82; border-color: #ffffffd4; border-radius: 16px; box-shadow: 0 5px 24px #881e5505, inset 0 1px 0 #fff; }
+.stat-icon.blue { color: var(--college-berry); background: #881e550c; }
+.stat-icon.amber { color: #9e587f; background: #d14aa40d; }
+.stat-icon.violet { color: #aa4f8f; background: #e27dbe1a; }
+.stats strong { font-weight: 600; color: #30262c; }
+.task-row { padding-top: 23px; padding-bottom: 23px; border-color: #881e550b; }
+.task-row:hover { background: #e27dbe08; }
+.panel-header { border-color: #881e550e; }
+.task-title { color: #332a30; }
+.task-title:hover { color: var(--college-berry); }
+.task-check:hover { color: var(--college-berry); border-color: var(--college-orchid); background: #e27dbe13; }
+.search { background: #881e5506; border-color: #ffffffa6; }
+.search:focus-within { box-shadow: 0 0 0 3px #d14aa41a; }
+.secondary { background: #ffffff9e; border-color: #ffffffd4; color: #695761; box-shadow: 0 3px 10px #881e5505, inset 0 1px 0 #fff; }
+.secondary:hover { background: #fff; color: var(--college-berry); }
+.text-button { color: var(--college-berry); }
+.source-label.email, .connection-icon.email { color: #8b426a; background: #881e550b; }
+.source-label.manual { color: #8e6080; background: #e27dbe18; }
+.source-label.wecom { color: #477b67; background: #477b670d; }
+.engine-badge { color: #944471; background: #d14aa410; }
+.engine-badge.local { color: #8a8088; background: #8a80880c; }
+.review-badge { color: #a04f80; }
+.priority.high { color: #ab613c; }
+.priority.high i { background: #c77a50; }
+.info-box, .analysis-note { background: #881e5505; }
+.field input, .field select, #memory-form textarea { border-color: #881e5519; background: #ffffffa6; }
+.toggle-line input:checked { background: var(--college-berry); }
+.settings-save { background: #fcf8fbe8; }
+.settings-facts code { color: #7b6b75; }
+.memory-row { border-color: #881e550e; }
+#memory-filter { color: #786371; background: #881e5506; }
+dialog { background: #fcf8fbf5; border-color: #ffffffd4; box-shadow: 0 25px 85px #541c3c25; }
+dialog::backdrop { background: #30202b28; }
+.capture-content {
+  background: linear-gradient(125deg, #ffffff87, #f9eaf46b);
+  border-color: #ffffffd4;
+  box-shadow: inset 0 1px 0 #fffffff0, inset 0 -1px 0 #ffffff59;
+}
+.spotlight-search { color: #94607f; }
+.capture-content #capture-text { color: #30232b; }
+.capture-content #capture-text::placeholder { color: #95818e; }
+.capture-submit { color: #955b7b; background: #ffffff78; border-color: #ffffffb3; }
+.capture-submit:hover { color: var(--college-berry); background: #fff; }
+.capture-content .capture-foot, .capture-content kbd { color: #887380; }
+.capture-content .field input:focus-visible, .capture-content .field select:focus-visible { outline-color: #d14aa433; }
+.spotlight-save-row { border-color: #881e5512; }
+:root[data-material='opaque'] { background: #f5eff3; }
+:root[data-material='opaque'] .sidebar { background: #f1e8ee; }
+:root[data-material='opaque'] #workspace { background: #fcf9fb; }
+:root[data-material='opaque'] .capture-content { background: #faf3f7; }
+@media (prefers-reduced-transparency: reduce) {
+  .sidebar, .capture-content { background: #f5edf2; backdrop-filter: none; }
+  #workspace, .task-panel, .stats article, .settings-card, .connection-card { background: #fff; backdrop-filter: none; }
+}
+@media (forced-colors: active) {
+  .primary, nav button.active { background: Highlight; color: HighlightText; }
+  .sidebar, #workspace, .task-panel, .stats article, .settings-card, .connection-card, .capture-content { background: Canvas; color: CanvasText; border-color: CanvasText; backdrop-filter: none; }
+  .brand-mark, .task-title, .text-button, .source-label, .engine-badge, .spotlight-search, .capture-content #capture-text { color: CanvasText; }
+}

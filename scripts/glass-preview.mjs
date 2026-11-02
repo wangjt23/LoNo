@@ -35,12 +35,12 @@ try {
     const backdrop = new BrowserWindow({ ...bounds, frame: false, alwaysOnTop: true, webPreferences: { sandbox: true, nodeIntegration: false } });
     globalThis.glassBackdrop = backdrop;
     await backdrop.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><html><head><style>
-      html{height:100%;background:radial-gradient(ellipse at 14% 80%,#edaf98 0,transparent 51%),radial-gradient(ellipse at 85% 20%,#748bd1 0,transparent 55%),linear-gradient(125deg,#c3b2d6,#9caed0 55%,#d1c5d4)}
+      html{height:100%;background:radial-gradient(ellipse at 14% 80%,#e27dbe 0,transparent 51%),radial-gradient(ellipse at 85% 20%,#b57098 0,transparent 55%),linear-gradient(125deg,#f2e3eb,#c694b1 55%,#e6cbdc)}
       body{margin:0;height:100vh;background-image:radial-gradient(#ffffff55 .9px,transparent .9px);background-size:18px 18px;font:12px 'Segoe UI',sans-serif;color:#fff9}
       header{padding:25px 30px;letter-spacing:2px} .orb{position:absolute;left:24%;top:24%;width:270px;height:270px;border:1px solid #ffffff59;border-radius:50%;box-shadow:0 0 0 75px #ffffff0d,0 0 0 150px #ffffff07}
       footer{position:absolute;bottom:24px;left:30px;letter-spacing:1px}
       .marker{position:absolute;left:4px;top:4px;width:12px;height:12px;background:#4d83c9}
-      </style></head><body><div class="marker"></div><header>SHIGUANG · MATERIAL STUDY</header><div class="orb"></div><footer>本地测试背景 · 用于观察系统毛玻璃效果</footer></body></html>`));
+      </style></head><body><div class="marker"></div><header>COLLEGE · GLASS MATERIAL STUDY</header><div class="orb"></div><footer>本地测试背景 · 用于观察系统毛玻璃效果</footer></body></html>`));
     backdrop.show(); backdrop.moveTop();
     return { bounds, displayId: String(display.id) };
   });

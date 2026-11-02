@@ -42,3 +42,11 @@
 - 检查截图：`artifacts/00-quick-capture.png`（输入）、`02-capture.png`（展开）、`01-empty.png`（空状态）、`03-sources.png`（来源）、`04-workspace.png`（列表）。截图使用测试数据，不包含用户工作记录。
 - 当前用户旧版进程未关闭。旧版若占用全局快捷键，新进程会显示提示，可通过主界面按钮打开弹窗。
 - 本轮未重新构建便携包，也没有改变 Smart App Control 状态；现有签名限制保持在 WINDOWS-SIGNING.md 中记录的状态。
+
+## 学院配色版 · 0.2.2
+
+从学院PPT第一页继承的slideLayout36读取明确配色说明，确认通用theme1.xml的WPS配色不是学院规范。主操作色#881E55，焦点及细节#D14AA4，低透明度玻璃染色#E27DBE，深灰#262626；排版优先HarmonyOS Sans（本机若有）、苹方、微软雅黑和Segoe UI。
+
+将学院色应用到侧栏、按钮、选中态、来源标签、AI标注、记忆页、表单、托盘图标和Spotlight输入层。保留留白和语义状态颜色，不做大面积高饱和填充。毛玻璃使用原生Acrylic，CSS透明边框与轻阴影辅助层级；不透明/高对比模式有独立回退。
+
+artifacts/college/ 为模拟数据截图；artifacts/glass-native-*.png 为受控背景上的原生合成效果。产品名未定，保留现名用于识别；正式更名时再同步窗口标题、托盘、桌面入口和视频，保持数据目录不变。
