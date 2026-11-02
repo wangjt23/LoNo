@@ -5,7 +5,7 @@ import { validateEndpoint } from './http.js';
 
 export const mailDefaults = { enabled: false, protocol: 'imap', endpoint: '', domain: '', host: '', port: 993, user: '', password: '', mailbox: 'INBOX', extractMemory: true };
 export const defaults = { pollMinutes: 10, launchAtLogin: false, model: { enabled: false, endpoint: '', model: '', apiKey: '' }, mail: { ...mailDefaults }, mailAccounts: [], bridge: { enabled: false, endpoint: '', token: '' } };
-const mailSchema = z.object({ id: z.string().min(1).max(100), alias: z.string().trim().max(80).default(''), enabled: z.boolean(), protocol: z.enum(['imap', 'exchange']), endpoint: z.string().max(2000), domain: z.string().max(200), extractMemory: z.boolean(), host: z.string().max(300), port: z.number().int().min(1).max(65535), user: z.string().max(300), password: z.string().max(4000), mailbox: z.string().min(1).max(300) });
+export const mailSchema = z.object({ id: z.string().min(1).max(100), alias: z.string().trim().max(80).default(''), enabled: z.boolean(), protocol: z.enum(['imap', 'exchange']), endpoint: z.string().max(2000), domain: z.string().max(200), extractMemory: z.boolean(), host: z.string().max(300), port: z.number().int().min(1).max(65535), user: z.string().max(300), password: z.string().max(4000), mailbox: z.string().min(1).max(300) });
 const schema = z.object({ pollMinutes: z.number().int().min(1).max(1440), launchAtLogin: z.boolean(), model: z.object({ enabled: z.boolean(), endpoint: z.string().max(2000), model: z.string().max(200), apiKey: z.string().max(4000) }), mailAccounts: z.array(mailSchema).max(20), bridge: z.object({ enabled: z.boolean(), endpoint: z.string().max(2000), token: z.string().max(4000) }) });
 function aliases(accounts) {
   const ids = new Set(), used = new Set();

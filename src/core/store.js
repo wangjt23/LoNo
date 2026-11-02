@@ -73,6 +73,8 @@ export class Store {
     });
   }
   tasks() { return this.all(`SELECT t.*, r.source, r.account_id, r.account_alias, r.sender, r.text, r.analysis FROM tasks t JOIN records r ON r.id=t.record_id ORDER BY CASE status WHEN 'review' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, COALESCE(remind_at,'9999'), created_at DESC`); }
+  recordsForAccount(id) { return this.all('SELECT * FROM records WHERE account_id=? ORDER BY received_at DESC LIMIT 100',[id]); }
+  mailStats() { return Object.fromEntries(this.all("SELECT r.account_id,COUNT(r.id) AS records,COUNT(t.id) AS reminders FROM records r LEFT JOIN tasks t ON t.record_id=r.id WHERE r.source='email' GROUP BY r.account_id").map(row=>[row.account_id,{records:Number(row.records),reminders:Number(row.reminders)}])); }
   records(limit = 500) { return this.all(`SELECT * FROM records ORDER BY received_at DESC${limit ? ' LIMIT ?' : ''}`, limit ? [limit] : []); }
   record(id) { return this.all('SELECT * FROM records WHERE id=?', [id])[0]; }
   task(id) { return this.all('SELECT t.*,r.source,r.account_id,r.account_alias,r.sender,r.text,r.analysis,r.received_at FROM tasks t JOIN records r ON r.id=t.record_id WHERE t.id=?', [id])[0]; }

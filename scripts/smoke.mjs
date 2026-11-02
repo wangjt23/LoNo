@@ -208,7 +208,12 @@ try {
   assert.equal(await main.locator('[data-action="deepseek-preset"]').count(), 0);
   assert.equal(await main.locator('[name="model.clearSecret"]').count(), 0);
   assert.equal(await main.locator('#settings-form button[type="submit"]').textContent(), '保存配置');
-  assert.equal(await main.locator('.settings-save').evaluate(el => getComputedStyle(el).position), 'static');
+  assert.equal(await main.locator('.settings-save').evaluate(el => getComputedStyle(el).position), 'fixed');
+  const fixedBefore=await main.locator('.settings-save button').boundingBox();
+  await main.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
+  const fixedAfter=await main.locator('.settings-save button').boundingBox();
+  assert.equal(Math.round(fixedBefore.y),Math.round(fixedAfter.y),'save button stays at viewport bottom when scrolling');
+  assert.ok(await main.locator('.settings-save button').evaluate(el=>innerHeight-el.getBoundingClientRect().bottom<=30&&innerWidth-el.getBoundingClientRect().right<=40));
   await main.locator('[data-action="add-mail-account"]').click();
   const mailboxOne = main.locator('[data-mail-account]').first();
   await mailboxOne.locator('[name$=".user"]').fill('first@example.com');
@@ -227,6 +232,21 @@ try {
   await main.waitForFunction(async () => (await window.reminder.invoke('snapshot')).settings.mailAccounts.length === 2);
   const mailSettings=(await main.evaluate(()=>window.reminder.invoke('snapshot'))).settings.mailAccounts;
   assert.deepEqual(mailSettings.map(a=>[a.alias,a.protocol,a.hasPassword]),[['mail1','imap',true],['mail2','exchange',true]]);
+  assert.equal(await main.locator('[data-action="resume-mail"]').count(),0);
+  await app.evaluate(()=>{globalThis.lonoMailIO.testImap=async()=>{throw Object.assign(new Error('rejected'),{code:'AUTH'});};});
+  await main.locator('[data-action="test-mail"]').first().click();
+  await main.locator('.mail-test-result.error').first().waitFor();
+  assert.equal((await main.evaluate(()=>window.reminder.invoke('snapshot'))).sync.mailAccounts[mailSettings[0].id].testCode,'AUTH');
+  assert.equal((await main.evaluate(()=>window.reminder.invoke('snapshot'))).sync.mailAccounts[mailSettings[0].id].paused,false,'connection test does not change sync cursor or pause state');
+  await app.evaluate(()=>{globalThis.lonoMailIO.testImap=async()=>({connected:true,total:42,readOnly:true,bodiesRead:false});globalThis.lonoMailIO.pollImap=async()=>{throw Object.assign(new Error('rejected'),{code:'AUTH'});};});
+  await main.locator('[data-action="test-mail"]').first().click();
+  await main.locator('.mail-test-result.ok').first().waitFor();
+  await main.locator('[data-action="sync-mail"]').first().click();
+  await main.waitForFunction(async()=>{const s=await window.reminder.invoke('snapshot');return s.sync.mailAccounts[s.settings.mailAccounts[0].id].paused;});
+  await main.getByRole('button',{name:'重试同步',exact:true}).waitFor();
+  await app.evaluate(()=>{globalThis.lonoMailIO.pollImap=async()=>({count:0,uid:7,validity:'test-validity'});});
+  await main.getByRole('button',{name:'重试同步',exact:true}).click();
+  await main.waitForFunction(async()=>{const s=await window.reminder.invoke('snapshot');const status=s.sync.mailAccounts[s.settings.mailAccounts[0].id];return status.state==='ok'&&!status.paused&&status.lastSuccessAt;});
   await main.locator('[data-action="clear-secret"][data-kind="model"]').click();
   await main.locator('#clear-secret-form [data-action="close"]').click();
   assert.equal((await main.evaluate(()=>window.reminder.invoke('snapshot'))).settings.model.hasApiKey,true);
@@ -470,6 +490,15 @@ try {
     const analysis = await window.reminder.invoke('analyze', '提交过期测试材料');
     await window.reminder.invoke('save-capture', { token: analysis.token, fields: { title: '过期测试材料', dueAt: new Date(Date.now() - 86400000).toISOString(), remindAt: null, priority: 'medium' } });
   });
+  await memoryRestarted.locator('[data-view="unfinished"]').click();
+  assert.equal(await memoryRestarted.locator('[data-view="today"]').evaluate(el=>el.nextElementSibling.dataset.view),'unfinished','unfinished follows today');
+  const unfinishedSnapshot=await memoryRestarted.evaluate(()=>window.reminder.invoke('snapshot'));
+  const unfinishedTasks=unfinishedSnapshot.tasks.filter(t=>t.status!=='done');
+  assert.equal(await memoryRestarted.locator('.task-row').count(),unfinishedTasks.length);
+  assert.equal(await memoryRestarted.locator('#count-unfinished').textContent(),String(unfinishedTasks.length));
+  assert.equal(await memoryRestarted.locator('.task-row.completed').count(),0);
+  assert.equal(await memoryRestarted.locator('.stats').count(),0);
+  await memoryRestarted.getByText('过期测试材料',{exact:true}).waitFor();
   await memoryRestarted.locator('[data-view="today"]').click();
   assert.equal(await memoryRestarted.getByText('过期测试材料', { exact: true }).count(), 0);
   await memoryRestarted.locator('[data-view="review"]').click();
@@ -487,6 +516,10 @@ try {
   await memoryRestarted.locator('[data-view="review"]').click();
   await memoryRestarted.getByText('无日期测试材料', { exact: true }).waitFor();
   assert.equal(await memoryRestarted.locator('#count-review').textContent(), '1');
+  await memoryRestarted.locator('[data-view="unfinished"]').click();
+  await memoryRestarted.getByText('无日期测试材料',{exact:true}).waitFor();
+  assert.equal(await memoryRestarted.getByText('过期测试材料',{exact:true}).count(),0,'completed items leave unfinished');
+
   await memoryRestarted.locator('[data-view="overdue"]').click();
   assert.equal(await memoryRestarted.getByText('无日期测试材料', { exact: true }).count(), 0);
   await memoryRestarted.evaluate(()=>window.reminder.invoke('smoke','mail-sources'));
@@ -498,6 +531,13 @@ try {
   }
   await memoryRestarted.locator('[data-view="sources"]').click();
   for(const alias of ['mail1','mail2'])assert.equal(await memoryRestarted.locator('.connection-card h2').filter({hasText:alias}).count(),1);
+  const firstMailboxCard=memoryRestarted.locator('.connection-card').filter({has:memoryRestarted.getByRole('heading',{name:'mail1',exact:true})});
+  assert.ok((await firstMailboxCard.textContent()).includes('收录 1 封邮件 · 生成 1 条提醒'));
+  await firstMailboxCard.getByRole('button',{name:'查看记录',exact:true}).click();
+  assert.equal(await memoryRestarted.locator('.record').count(),1);
+  assert.equal(await memoryRestarted.locator('.record .source-label').textContent(),'邮件 · mail1');
+  await memoryRestarted.getByRole('button',{name:'显示全部来源',exact:true}).click();
+  assert.ok(await memoryRestarted.locator('.record').count()>1);
   assert.deepEqual(errors, []);
   shellPaths.forEach((file,index)=>assert.equal((existsSync(file)?readFileSync(file).toString('base64'):null)===shellBefore[index],true,'desktop tests do not change real Windows shortcuts'));
   console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, fresh capture on dismissal and late-response isolation, Agent chat query/edit/memory/restart, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication, memory review/source/recall/edit/search/add/delete/restart', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));

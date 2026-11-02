@@ -11,6 +11,7 @@ import { pollMail, pollBridge, bridgeSchema, identity } from './core/connectors.
 import { trayIcon } from './icon.js';
 import { registerCaptureKeys } from './core/shortcuts.js';
 import { testExchangeLocally, pollExchangeLocally } from './exchange-transport.js';
+import { connectionInput, testImapConnection, mailFailure } from './core/mail-connection.js';
 import { accountStateKey, syncMailAccounts } from './core/mail-accounts.js';
 import { exchangeInput, exchangeRequestOptions } from './core/exchange.js';
 import { extractMemories } from './core/memory.js';
@@ -126,8 +127,28 @@ function registerShortcuts() {
   tray?.setToolTip(`LoNo · ${shortcutState.active || '托盘菜单'} 快速记录`);
 }
 function broadcast() { for (const win of [mainWindow, captureWindow]) if (win && !win.isDestroyed()) win.webContents.send('changed'); }
+function mailStatuses() {
+  const states={...syncStatus.mailAccounts};
+  for(const account of config.value.mailAccounts) {
+    const cursor=store.state(accountStateKey(account),{});
+    states[account.id]={...store.state('mail-status:'+account.id,{}),...states[account.id],saved:true,enabled:account.enabled,paused:Boolean(cursor.authPaused)};
+    if(states[account.id].testState==='testing'&&!mailTestJobs.has(account.id)){states[account.id].testState='interrupted';states[account.id].testMessage='上次连接测试未完成，请重新测试';}
+    if(states[account.id].state==='syncing'&&!syncing){states[account.id].state='idle';states[account.id].message='上次同步未完成，请重新同步';}
+  }
+  return states;
+}
+function setMailStatus(account,status) {
+  const saved=config.value.mailAccounts.some(a=>a.id===account.id);
+  const next={...(syncStatus.mailAccounts?.[account.id]||store.state('mail-status:'+account.id,{})),...status,saved};
+  syncStatus.mailAccounts ||= {};syncStatus.mailAccounts[account.id]=next;
+  if(saved)store.setState('mail-status:'+account.id,next);
+  broadcast();return next;
+}
+const mailTestJobs=new Set();
+const mailIO={testImap:testImapConnection,pollImap:pollMail};
+if(smoke)globalThis.lonoMailIO=mailIO;
 function snapshot() {
-  return { tasks: store.tasks(), records: store.records(), memories: store.memories(), settings: config.public(), sync: syncStatus,
+  return { tasks: store.tasks(), records: store.records(), mailStats: store.mailStats(), memories: store.memories(), settings: config.public(), sync: { ...syncStatus, mailAccounts: mailStatuses() },
     runtime: { shortcutOK, shortcut: shortcutState.active, shortcuts: shortcutState.keys, shortcutWarning, startupWarning, captureWarning, notificationWarning, material: windowMaterial(), dataPath: app.getPath('userData'), version: app.getVersion() } };
 }
 async function start() {
@@ -220,6 +241,26 @@ function registerIPC() {
     return { count, warning: result.warning, engine: result.engine };
   });
   handle('test-exchange', input => testExchangeLocally(input));
+  handle('mail-records', id => {if(typeof id!=='string'||id.length>100)throw new Error('无效邮箱标识');return store.recordsForAccount(id);});
+  handle('test-mail', async input => {
+    if(mailTestJobs.has(input?.id))throw new Error('正在测试此邮箱');
+    const saved=config.value.mailAccounts.find(a=>a.id===input?.id),account=connectionInput(input,saved);
+    mailTestJobs.add(account.id);setMailStatus(account,{testState:'testing',testMessage:'正在验证TLS、登录和只读收件箱权限…'});
+    try {
+      const result=account.protocol==='exchange'?await testExchangeLocally(account):await mailIO.testImap(account);
+      const status=setMailStatus(account,{testState:'ok',testAt:new Date().toISOString(),testMessage:'连接成功，收件箱共 '+result.total+' 封；未读取邮件正文。'});
+      return status;
+    } catch(error) {
+      const issue=mailFailure(error);
+      return setMailStatus(account,{testState:'error',testAt:new Date().toISOString(),testCode:issue.code,testMessage:issue.message});
+    } finally {mailTestJobs.delete(account.id);}
+  });
+  handle('sync-mail', async accountId => {
+    if(syncing)throw new Error('正在同步，请等待当前任务完成');
+    const account=config.value.mailAccounts.find(a=>a.id===accountId);if(!account)throw new Error('请先保存此邮箱配置');connectionInput(account,account);
+    const key=accountStateKey(account);store.setState(key,{...store.state(key,{}),authPaused:false});
+    await syncAll(accountId);return mailStatuses()[accountId];
+  });
   handle('test-model', async () => {
     if (!config.value.model.enabled) throw new Error('请先启用并保存模型设置');
     const result = await analyze('FW: 有关事项说明\n请于明天下午三点前提交项目验收材料，提前一小时提醒。', { source: 'email', model: config.value.model });
@@ -266,7 +307,7 @@ function registerIPC() {
     }
     resetPolling(); broadcast(); return result;
   });
-  handle('sync', async () => { await syncAll(); return syncStatus; });
+  handle('sync', async () => { if(syncing)throw new Error('正在同步，请等待当前任务完成');await syncAll(); return syncStatus; });
   handle('clear-secret', async input => { if(syncing) throw new Error('正在同步，请稍后再清除'); const result=await config.clearSecret(input); resetPolling(); broadcast(); return result; });
   handle('resume-mail', accountId => {
     if (syncing) throw new Error('请等待当前同步完成');
@@ -321,12 +362,12 @@ function registerIPC() {
 function resetPolling() { if (timer) clearInterval(timer); timer = setInterval(() => void syncAll(), config.value.pollMinutes * 60000); timer.unref(); }
 const consume = message => messages.consume(message);
 
-async function syncAll() {
+async function syncAll(accountId) {
   if (syncing) return;
   syncing = true;
   try {
-    await syncMailAccounts({accounts:config.value.mailAccounts,store,pollImap:pollMail,pollExchange:pollExchangeLocally,consume,onStatus:(account,status)=>{syncStatus.mailAccounts ||= {};syncStatus.mailAccounts[account.id]=status;syncStatus.email=status;broadcast();}});
-    if (config.value.bridge.enabled) {
+    await syncMailAccounts({accounts:accountId?config.value.mailAccounts.filter(a=>a.id===accountId).map(a=>({...a,enabled:true})):config.value.mailAccounts,store,pollImap:mailIO.pollImap,pollExchange:pollExchangeLocally,consume,onStatus:(account,status)=>{setMailStatus(account,status);syncStatus.email=status;}});
+    if (!accountId && config.value.bridge.enabled) {
       syncStatus.wecom = { state: 'syncing', message: '正在读取企业微信桥接…' }; broadcast();
       try {
         const bridge = config.value.bridge; const key = `bridge:${identity(bridge.endpoint)}`;

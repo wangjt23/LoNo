@@ -52,9 +52,9 @@ nav button.active b { color: #98647f; }
 :root[data-platform="darwin"] .sidebar::before { content: ''; position: absolute; inset: 0 0 auto; height: 58px; -webkit-app-region: drag; }
 :root[data-platform="darwin"] .topbar { padding-right: 40px; }
 @media (max-height: 760px) {
-  :root[data-platform="darwin"] .sidebar nav button { padding-top: 6px; padding-bottom: 6px; margin-block: 2px; }
-  :root[data-platform="darwin"] .nav-caption { margin-top: 14px; }
-  :root[data-platform="darwin"] .sidebar-footer { display: none; }
+  .sidebar nav button { padding-top: 6px; padding-bottom: 6px; margin-block: 2px; }
+  .nav-caption { margin-top: 14px; }
+  .sidebar-footer { display: none; }
 }
 .settings-card { scroll-margin-top: 96px; }
 .settings-card.settings-target { outline: 2px solid #d14aa480; outline-offset: 4px; box-shadow: 0 0 0 8px #d14aa40b; }
@@ -246,3 +246,16 @@ dialog::backdrop { background: #30202b28; }
 [data-protocol][hidden] { display:none !important; }
 .settings-save { position:static; justify-content:flex-end; background:none; backdrop-filter:none; border:0; border-radius:0; padding:4px 0 12px; }
 @media(max-width:700px) { .secret-row { align-items:stretch; flex-direction:column; gap:8px; } }
+
+#settings-form { padding-bottom:88px; }
+.settings-save { position:fixed; right:32px; bottom:24px; z-index:8; width:auto; padding:0; margin:0; background:transparent; border:0; backdrop-filter:none; }
+.settings-save .primary { box-shadow:0 8px 24px #881e5533; }
+.mail-status { margin:14px 0 10px; padding:12px 14px; border:1px solid #881e5515; border-radius:10px; background:#ffffff70; font-size:12px; overflow-wrap:anywhere; }
+.mail-status p { margin:6px 0; }
+.mail-status small,.mail-operation-hint { color:#81747c; font-size:11px; }
+.mail-status.error>strong,.mail-test-result.error { color:#99512c; }
+.mail-test-result.ok,.mail-status.ok>strong { color:#56856c; }
+.mail-operation-hint { display:block; margin-bottom:12px; }
+
+.connection-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:18px; }
+.task-panel.records { scroll-margin-top:80px; }
