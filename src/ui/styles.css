@@ -171,3 +171,31 @@ dialog { background: #f9faffed; border-color: #ffffffb3; }
   #workspace { background: #fff; }
   .task-panel, .stats article, .settings-card, .connection-card { background: #fff; }
 }
+
+/* Spotlight: a single command line, not a miniature application window. */
+.capture-content { padding: 12px 20px 11px; min-height: 100dvh; border-radius: 13px; background: linear-gradient(125deg, #ffffff6b, #f3f5fa52); }
+.capture-drag-strip { position: absolute; left: 0; top: 0; width: 100%; height: 9px; -webkit-app-region: drag; }
+.spotlight-bar { display: flex; gap: 14px; align-items: center; min-height: 52px; }
+.spotlight-search { color: #6c7482; display: grid; place-items: center; }
+.spotlight-search svg { width: 25px; height: 25px; stroke-width: 1.7; }
+.capture-content #capture-text, .has-preview #capture-text { flex: 1; min-width: 0; height: 44px; min-height: 44px; max-height: 44px; padding: 5px 0; border: 0; outline: 0; border-radius: 0; box-shadow: none; background: transparent; font-size: 22px; line-height: 1.5; font-weight: 400; letter-spacing: -.4px; }
+.capture-content #capture-text:focus-visible { outline: none; border: 0; box-shadow: none; }
+.capture-content #capture-text::placeholder { color: #7e8490; }
+.capture-submit { width: 31px; height: 31px; border-radius: 8px; display: grid; place-items: center; background: #ffffff6b; border: 1px solid #ffffff9e; color: #667386; flex-shrink: 0; padding: 0; }
+.capture-submit:hover { background: #ffffffb3; color: #0071e3; }
+.capture-submit:disabled { animation: capture-pulse 1s ease-in-out infinite; }
+.capture-content .capture-foot { margin-top: auto; padding-top: 10px; font-size: 10px; color: #777f8d; }
+.capture-content #capture-mode-note { max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.capture-content #capture-key-hint { white-space: nowrap; }
+.capture-content #capture-save-form { margin-top: 13px; padding: 17px 2px 0; }
+.capture-content .task-fields { gap: 13px 16px; margin-top: 15px; }
+.capture-content .field input, .capture-content .field select { height: 36px; }
+.capture-content .analysis-note { padding: 6px 0; background: transparent; border: 0; margin: 11px 0; }
+.capture-content .analysis-note summary { color: #798291; font-size: 10px; }
+.spotlight-save-row { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #cbd4e34d; padding-top: 12px; margin-top: 10px; }
+.spotlight-save-row > span { font-size: 11px; color: #747f8f; }
+.spotlight-save-row button { min-height: 33px; font-size: 12px; padding: 6px 14px; }
+.spotlight-save-row .button-shortcut { margin-left: 8px; }
+.capture-mode #toast { bottom: 8px; font-size: 11px; padding: 7px 12px; }
+@keyframes capture-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .capture-submit:disabled { animation: none; } }

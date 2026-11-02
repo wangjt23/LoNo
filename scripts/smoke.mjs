@@ -48,14 +48,23 @@ try {
   assert.ok(capture, 'quick capture window exists');
   capture.on('pageerror', error => errors.push(error.message));
   await capture.locator('#capture-text').waitFor();
+  await capture.waitForFunction(() => document.activeElement?.id === 'capture-text');
+  assert.equal(await capture.locator('[data-action="close"]').count(), 0, 'Spotlight panel has no close button');
   await capture.screenshot({ path: path.join(artifacts, '00-quick-capture.png') });
   assert.ok(await capture.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), 'collapsed capture fits without scrolling');
   await capture.locator('#capture-text').fill('未保存的草稿');
+  await app.evaluate(({ BrowserWindow }) => { const main = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('/index.html')); main.show(); main.moveTop(); main.focus(); });
+  await main.locator('.page-heading h1').click();
+  await main.waitForTimeout(150);
+  assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('capture=1')).isVisible()), false, 'outside click dismisses the panel');
+  await main.locator('.new-button').click();
+  await capture.waitForFunction(() => document.activeElement?.id === 'capture-text');
+  assert.equal(await capture.locator('#capture-text').inputValue(), '未保存的草稿', 'outside click preserves draft');
   await capture.locator('#capture-text').press('Escape');
   await main.locator('.new-button').click();
   assert.equal(await capture.locator('#capture-text').inputValue(), '未保存的草稿', 'Escape preserves draft');
   await capture.locator('#capture-text').fill('明天下午三点提醒我提交项目材料，提前半小时提醒');
-  await capture.locator('#capture-text').press('Control+Enter');
+  await capture.locator('#capture-text').press('Enter');
   await capture.locator('#capture-save-form').waitFor();
   const reminder = await capture.locator('[name="remindAt"]').inputValue();
   assert.ok(reminder.endsWith('14:30'), `Chinese date/lead parse: ${reminder}`);
@@ -131,9 +140,12 @@ try {
   await main.locator('[data-action="export"]').click();
   await main.getByText('记录已导出（不包含连接密钥）', { exact: true }).waitFor();
   assert.equal(JSON.parse(readFileSync(exportFile, 'utf8')).records.length, 2);
-  const registered = await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('CommandOrControl+Shift+Space'));
-  assert.equal(snapshot.runtime.shortcutOK, registered);
-  if (!registered) assert.ok(snapshot.runtime.startupWarning.includes('快捷键被其他程序占用'), 'shortcut conflicts are reported; tray/UI capture still works');
+  for (const key of snapshot.runtime.shortcuts) {
+    const registered = await app.evaluate(({ globalShortcut }, accelerator) => globalShortcut.isRegistered(accelerator), key.accelerator);
+    assert.equal(key.registered, registered);
+  }
+  assert.equal(snapshot.runtime.shortcutOK, snapshot.runtime.shortcuts.some(key => key.registered));
+  if (!snapshot.runtime.shortcuts[0].registered) assert.ok(snapshot.runtime.shortcutWarning.includes('占用'), 'primary conflict exposes fallback or tray guidance');
   await app.close(); app = undefined;
   assert.ok(existsSync(path.join(dir, 'reminders.sqlite')));
   app = await launch();

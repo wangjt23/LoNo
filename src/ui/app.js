@@ -28,11 +28,13 @@ const titles = { all: ['提醒总览', '让每一件重要的事，都有着落�
 
 async function refresh() {
   data = await api.invoke('snapshot');
+  document.title = isCapture ? '快速记录 · 拾光' : `拾光提醒 · ${data.runtime.version}`;
   document.documentElement.dataset.material = data.runtime.material || 'opaque';
   if (isCapture && $('#capture-mode-note')) $('#capture-mode-note').textContent = modelNotice();
   if (!isCapture) {
     if (!$('#workspace')) shell();
     updateNav();
+    $('.new-button kbd').textContent = data.runtime.shortcut === 'Ctrl+Alt+Space' ? 'Ctrl Alt ␣' : data.runtime.shortcut ? 'Ctrl ⇧ ␣' : '未注册';
     if (view !== 'settings' || !$('#settings-form')) renderView();
   }
 }
@@ -47,7 +49,8 @@ function updateNav() {
 }
 function renderView() {
   const [title, subtitle] = titles[view];
-  $('#content').innerHTML = `<section class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div><button class="secondary" data-action="sync">${icon('refresh')} 同步</button></section>${data.runtime.startupWarning ? `<details class="runtime-notice"><summary>快捷键或本地设置需要留意</summary><p>${esc(data.runtime.startupWarning)}</p></details>` : ''}${data.runtime.notificationWarning ? `<div class="warning">${esc(data.runtime.notificationWarning)}</div>` : ''}<div id="view-content"></div>`;
+  const warning = [data.runtime.startupWarning, data.runtime.shortcutWarning].filter(Boolean).join(' ');
+  $('#content').innerHTML = `<section class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div><button class="secondary" data-action="sync">${icon('refresh')} 同步</button></section>${warning ? `<details class="runtime-notice"><summary>快捷键或本地设置需要留意</summary><p>${esc(warning)}</p></details>` : ''}${data.runtime.notificationWarning ? `<div class="warning">${esc(data.runtime.notificationWarning)}</div>` : ''}<div id="view-content"></div>`;
   if (view === 'settings') renderSettings();
   else if (view === 'sources') renderSources();
   else renderTasks();
@@ -76,14 +79,14 @@ function field(label, name, value, type = 'text', hint = '') { return `<label cl
 function toggle(name, checked, title, description) { return `<label class="toggle-line"><div><strong>${title}</strong><small>${description}</small></div><input type="checkbox" name="${name}" ${checked ? 'checked' : ''}></label>`; }
 function renderSettings() {
   const s = data.settings;
-  $('#view-content').innerHTML = `<form id="settings-form"><section class="settings-card"><div class="section-label">01 / 智能分析</div><h2>接入你的模型或 Agent 网关</h2><p>启用后，输入内容和采集到的正文会发送至你配置的服务。关闭时使用本地中文规则。</p>${toggle('model.enabled', s.model.enabled, '启用模型分析', '兼容 chat/completions JSON 响应；不执行模型返回的工具调用')}<div class="form-grid">${field('完整接口地址', 'model.endpoint', s.model.endpoint, 'url', '例如 https://your-gateway/v1/chat/completions')}${field('模型名称', 'model.model', s.model.model)}${field('API Key', 'model.apiKey', '', 'password', s.model.hasApiKey ? '已加密保存；留空保留原密钥' : '仅使用系统加密保存')}${toggle('model.clearSecret', false, '清除已保存的 API Key', '保存设置后生效')}</div></section><section class="settings-card"><div class="section-label">02 / 邮件采集</div><h2>让邮件里的待办，自动出现</h2><p>使用邮箱 IMAP 授权码。只读采集，不更改邮件已读状态；首次读取近 7 天最多 50 封。</p>${toggle('mail.enabled', s.mail.enabled, '定期同步邮件', '仅支持 TLS 直连（通常为端口 993）')}<div class="form-grid">${field('IMAP 服务器', 'mail.host', s.mail.host, 'text', '例如 imap.qq.com')}${field('TLS 端口', 'mail.port', s.mail.port, 'number')}${field('邮箱账号', 'mail.user', s.mail.user)}${field('授权码 / 密码', 'mail.password', '', 'password', s.mail.hasPassword ? '已加密保存；留空保留' : '从邮箱设置中开启 IMAP 并生成授权码')}${field('文件夹', 'mail.mailbox', s.mail.mailbox)}${toggle('mail.clearSecret', false, '清除邮箱授权码', '同时关闭邮件同步后再清除')}</div></section><section class="settings-card"><div class="section-label">03 / 企业微信</div><h2>连接已授权的数据桥接</h2><p>由企业会话存档服务或 n8n 提供 GET JSON 接口；返回 messages 数组及可选 nextCursor。详见项目 README。</p>${toggle('bridge.enabled', s.bridge.enabled, '定期读取桥接', '请求携带 Bearer Token；仅允许 HTTPS 或本机 HTTP')}<div class="form-grid">${field('桥接接口地址', 'bridge.endpoint', s.bridge.endpoint, 'url')}${field('Bridge Token', 'bridge.token', '', 'password', s.bridge.hasToken ? '已加密保存；留空保留' : '可选，取决于桥接服务鉴权方式')}${toggle('bridge.clearSecret', false, '清除 Bridge Token', '保存设置后生效')}</div></section><section class="settings-card"><div class="section-label">04 / 桌面与数据</div><h2>适合你的工作节奏</h2><div class="form-grid">${field('采集间隔（分钟，1–1440）', 'pollMinutes', s.pollMinutes, 'number')}${toggle('launchAtLogin', s.launchAtLogin, '登录 Windows 后启动', '仅安装/固定存放应用后启用，移动文件可能导致失效')}</div><div class="settings-facts"><p>快速记录快捷键 <kbd>Ctrl + Shift + Space</kbd> <span>${data.runtime.shortcutOK ? '已注册' : '被占用，可使用托盘'}</span></p><p>数据位置 <code>${esc(data.runtime.dataPath)}</code></p><p>记录保存在本地 SQLite，凭据使用系统密钥加密。退出应用或电脑关机时无法提醒，重新启动时会检查错过的提醒。</p></div><div class="button-row"><button type="button" class="secondary" data-action="test-notification">测试桌面通知</button><button type="button" class="secondary" data-action="export">导出记录</button></div></section><div class="settings-save"><span id="settings-result">设置仅保存在此设备</span><button type="submit" class="primary">保存设置</button></div></form>`;
+  $('#view-content').innerHTML = `<form id="settings-form"><section class="settings-card"><div class="section-label">01 / 智能分析</div><h2>接入你的模型或 Agent 网关</h2><p>启用后，输入内容和采集到的正文会发送至你配置的服务。关闭时使用本地中文规则。</p>${toggle('model.enabled', s.model.enabled, '启用模型分析', '兼容 chat/completions JSON 响应；不执行模型返回的工具调用')}<div class="form-grid">${field('完整接口地址', 'model.endpoint', s.model.endpoint, 'url', '例如 https://your-gateway/v1/chat/completions')}${field('模型名称', 'model.model', s.model.model)}${field('API Key', 'model.apiKey', '', 'password', s.model.hasApiKey ? '已加密保存；留空保留原密钥' : '仅使用系统加密保存')}${toggle('model.clearSecret', false, '清除已保存的 API Key', '保存设置后生效')}</div></section><section class="settings-card"><div class="section-label">02 / 邮件采集</div><h2>让邮件里的待办，自动出现</h2><p>使用邮箱 IMAP 授权码。只读采集，不更改邮件已读状态；首次读取近 7 天最多 50 封。</p>${toggle('mail.enabled', s.mail.enabled, '定期同步邮件', '仅支持 TLS 直连（通常为端口 993）')}<div class="form-grid">${field('IMAP 服务器', 'mail.host', s.mail.host, 'text', '例如 imap.qq.com')}${field('TLS 端口', 'mail.port', s.mail.port, 'number')}${field('邮箱账号', 'mail.user', s.mail.user)}${field('授权码 / 密码', 'mail.password', '', 'password', s.mail.hasPassword ? '已加密保存；留空保留' : '从邮箱设置中开启 IMAP 并生成授权码')}${field('文件夹', 'mail.mailbox', s.mail.mailbox)}${toggle('mail.clearSecret', false, '清除邮箱授权码', '同时关闭邮件同步后再清除')}</div></section><section class="settings-card"><div class="section-label">03 / 企业微信</div><h2>连接已授权的数据桥接</h2><p>由企业会话存档服务或 n8n 提供 GET JSON 接口；返回 messages 数组及可选 nextCursor。详见项目 README。</p>${toggle('bridge.enabled', s.bridge.enabled, '定期读取桥接', '请求携带 Bearer Token；仅允许 HTTPS 或本机 HTTP')}<div class="form-grid">${field('桥接接口地址', 'bridge.endpoint', s.bridge.endpoint, 'url')}${field('Bridge Token', 'bridge.token', '', 'password', s.bridge.hasToken ? '已加密保存；留空保留' : '可选，取决于桥接服务鉴权方式')}${toggle('bridge.clearSecret', false, '清除 Bridge Token', '保存设置后生效')}</div></section><section class="settings-card"><div class="section-label">04 / 桌面与数据</div><h2>适合你的工作节奏</h2><div class="form-grid">${field('采集间隔（分钟，1–1440）', 'pollMinutes', s.pollMinutes, 'number')}${toggle('launchAtLogin', s.launchAtLogin, '登录 Windows 后启动', '仅安装/固定存放应用后启用，移动文件可能导致失效')}</div><div class="settings-facts"><p>快速记录快捷键 <kbd>${esc(data.runtime.shortcut || '未注册')}</kbd> <span>${data.runtime.shortcutOK ? '已注册' : '被占用，可使用托盘'}</span></p><p>数据位置 <code>${esc(data.runtime.dataPath)}</code></p><p>记录保存在本地 SQLite，凭据使用系统密钥加密。退出应用或电脑关机时无法提醒，重新启动时会检查错过的提醒。</p></div><div class="button-row"><button type="button" class="secondary" data-action="retry-shortcuts">重新注册快捷键</button><button type="button" class="secondary" data-action="test-notification">测试桌面通知</button><button type="button" class="secondary" data-action="export">导出记录</button></div></section><div class="settings-save"><span id="settings-result">设置仅保存在此设备</span><button type="submit" class="primary">保存设置</button></div></form>`;
 }
 function captureMarkup() {
-  return `<section class="capture-content"><div class="capture-head"><span class="mini-brand">${icon('check')}</span><span>拾光 <span class="capture-divider">/</span> 快速记录</span><button class="close-button" data-action="close" aria-label="关闭">×</button></div><label class="capture-prompt" for="capture-text">有什么需要记住？</label><textarea id="capture-text" aria-label="提醒内容" placeholder="明天下午三点，提醒我提交材料…" maxlength="30000" rows="2" autofocus></textarea><div class="capture-toolbar"><span id="capture-key-hint"><kbd>Ctrl</kbd> <kbd>↵</kbd> 分析 <span class="hint-divider">·</span> 支持自然语言</span><button class="primary" id="analyze-button" data-action="analyze">整理为提醒 ${icon('arrow')}</button></div><div id="capture-result" aria-live="polite"></div><div class="capture-foot"><span id="capture-mode-note">${modelNotice()}</span><span><kbd>Esc</kbd> 收起</span></div></section>`;
+  return `<section class="capture-content"><div class="capture-drag-strip" aria-hidden="true"></div><div class="spotlight-bar"><span class="spotlight-search">${icon('search')}</span><textarea id="capture-text" aria-label="提醒内容" placeholder="记下一件事…" maxlength="30000" rows="1" autofocus></textarea><button class="capture-submit" id="analyze-button" data-action="analyze" aria-label="分析提醒" title="Enter 分析">${icon('arrow')}</button></div><div id="capture-result" aria-live="polite"></div><div class="capture-foot"><span id="capture-mode-note">${modelNotice()}</span><span id="capture-key-hint"><kbd>↵</kbd> 整理 <span class="hint-divider">·</span> 点外部收起</span></div></section>`;
 }
 function resetCapturePreview() {
   preview = null; $('#capture-result').innerHTML = ''; document.body.classList.remove('has-preview');
-  $('#capture-key-hint').innerHTML = '<kbd>Ctrl</kbd> <kbd>↵</kbd> 分析 <span class="hint-divider">·</span> 支持自然语言';
+  $('#capture-key-hint').innerHTML = '<kbd>↵</kbd> 整理 <span class="hint-divider">·</span> 点外部收起';
   void api.invoke('capture-layout', 'input').catch(e => toast(e.message, true));
 }
 function fieldsMarkup(fields) {
@@ -114,7 +117,7 @@ document.addEventListener('click', async event => {
     if (['complete', 'restore'].includes(action)) { await api.invoke('update-task', { id: button.dataset.id, action }); toast(action === 'complete' ? '又完成了一件事' : '事项已恢复'); }
     if (action === 'snooze-current') { await api.invoke('update-task', { id: editing.id, action: 'snooze' }); $('#editor').close(); toast('将在 15 分钟后再次提醒'); }
     if (action === 'analyze') {
-      if (busy) return; busy = true; button.disabled = true; button.textContent = '正在分析…';
+      if (busy) return; busy = true; button.disabled = true; button.innerHTML = icon('refresh'); button.setAttribute('aria-label', '正在分析');
       const revision = captureRevision;
       resetCapturePreview();
       try {
@@ -122,12 +125,13 @@ document.addEventListener('click', async event => {
         if (revision !== captureRevision) { toast('输入已修改，请重新分析'); return; }
         preview = result;
         document.body.classList.add('has-preview');
-        $('#capture-key-hint').innerHTML = '<kbd>Ctrl</kbd> <kbd>↵</kbd> 保存 <span class="hint-divider">·</span> 可修改下方建议';
-        $('#capture-result').innerHTML = `<form id="capture-save-form"><div class="preview-heading"><span>${icon('check')} ${preview.remindAt ? '已整理好，确认即可' : '先记下来，时间稍后确定'}</span><span>${preview.engine === 'model' ? '模型分析' : '本地分析'}</span></div>${fieldsMarkup(preview)}<details class="analysis-note"><summary>查看分析依据</summary><p>${esc(preview.reason)}</p></details>${preview.warning ? `<p class="warning">${esc(preview.warning)}</p>` : ''}<button type="submit" class="primary full">${preview.remindAt ? '创建提醒' : '保存为待确认事项'} <span class="button-shortcut">Ctrl ↵</span></button></form>`;
+        $('#capture-key-hint').innerHTML = '<kbd>↵</kbd> 添加 <span class="hint-divider">·</span> 点外部收起';
+        $('#capture-result').innerHTML = `<form id="capture-save-form"><div class="preview-heading"><span>提醒预览</span><span>${preview.remindAt ? '确认时间后添加' : '时间待确认'}</span></div>${fieldsMarkup(preview)}<details class="analysis-note"><summary>分析依据</summary><p>${esc(preview.reason)}</p></details>${preview.warning ? `<p class="warning">${esc(preview.warning)}</p>` : ''}<div class="spotlight-save-row"><span>${preview.remindAt ? dateText(preview.remindAt) : '可稍后补充时间'}</span><button type="submit" class="primary">${preview.remindAt ? '添加提醒' : '保存待确认'} <span class="button-shortcut">↵</span></button></div></form>`;
         await api.invoke('capture-layout', 'preview');
-      } finally { busy = false; button.disabled = false; button.innerHTML = `重新分析 ${icon('arrow')}`; }
+      } finally { busy = false; button.disabled = false; button.innerHTML = icon('arrow'); button.setAttribute('aria-label', '分析提醒'); }
     }
     if (action === 'test-notification') { await api.invoke(action); toast('已请求系统发送测试通知'); }
+    if (action === 'retry-shortcuts') { const result = await api.invoke(action); toast(result.active ? `当前快捷键：${result.active}` : '快捷键仍被占用，可使用托盘快速记录', !result.active); }
     if (action === 'export') { if (await api.invoke('export')) toast('记录已导出（不包含连接密钥）'); }
     if (action === 'import') { button.disabled = true; const count = await api.invoke('import'); toast(`已导入 ${count} 条来源记录`); }
   } catch (error) { toast(error.message, true); }
@@ -169,7 +173,7 @@ document.addEventListener('submit', async event => {
 document.addEventListener('keydown', event => {
   if (event.isComposing || event.keyCode === 229) return;
   if (event.key === 'Escape' && isCapture) { event.preventDefault(); void api.invoke('hide-capture').catch(e => toast(e.message, true)); }
-  if (isCapture && (event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+  if (isCapture && event.key === 'Enter' && !event.shiftKey && (event.ctrlKey || event.metaKey || event.target.id === 'capture-text')) {
     event.preventDefault();
     if (busy) return;
     const form = $('#capture-save-form');
@@ -179,7 +183,7 @@ document.addEventListener('keydown', event => {
   if (!isCapture && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f' && $('#search')) { event.preventDefault(); $('#search').focus(); }
 });
 api.onChange(() => refresh().catch(e => toast(e.message, true)));
-api.onCapture(() => { $('#capture-text')?.focus(); });
+api.onCapture(() => { requestAnimationFrame(() => { const field = $('#capture-text'); if (field) { field.focus({ preventScroll: true }); field.setSelectionRange(field.value.length, field.value.length); } }); });
 try {
   await refresh();
   if (isCapture) { document.body.classList.add('capture-mode'); $('#app').innerHTML = captureMarkup(); $('#capture-text').focus(); }

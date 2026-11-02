@@ -1,6 +1,6 @@
 {
   "name": "shiguang-reminder",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "本地优先的智能工作提醒助手",
   "author": "Shiguang contributors",
   "private": true,

@@ -9,6 +9,7 @@ import { Store } from './core/store.js';
 import { Config } from './core/config.js';
 import { pollMail, pollBridge, bridgeSchema, identity } from './core/connectors.js';
 import { trayIcon } from './icon.js';
+import { registerCaptureKeys } from './core/shortcuts.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const smoke = process.argv.includes('--smoke');
@@ -17,13 +18,15 @@ if (dataArg) app.setPath('userData', path.resolve(dataArg.slice(11)));
 app.setAppUserModelId('com.shiguang.reminder');
 let mainWindow, captureWindow, tray, store, config, timer, quitting = false, syncing = false, captureExpanded = false;
 let shortcutOK = false, startupWarning = '', notificationWarning = '', notificationBusy = false;
+let shortcutState = { keys: [], active: null }, shortcutWarning = '', lastShortcutAt = 0;
+let captureBlurTimer;
 const previews = new Map();
 const notifications = new Set();
 const syncStatus = { email: { state: 'idle', message: '尚未同步' }, wecom: { state: 'idle', message: '尚未同步' } };
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', () => showMain());
+  app.on('second-instance', (_event, argv) => { if (argv.includes('--quick-capture')) capture(); else showMain(); });
   app.whenReady().then(start).catch(error => { dialog.showErrorBox('拾光提醒启动失败', `未能加载本地数据，请保留数据目录并重试。\n${error.message}`); app.quit(); });
 }
 
@@ -50,20 +53,37 @@ function showMain() { if (mainWindow) { mainWindow.show(); mainWindow.restore();
 function layoutCapture(useCursor = false) {
   const area = useCursor ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea : screen.getDisplayMatching(captureWindow.getBounds()).workArea;
   const width = Math.min(680, area.width - 32);
-  const height = Math.min(captureExpanded ? 640 : 310, area.height - 40);
+  const height = Math.min(captureExpanded ? 470 : 112, area.height - 40);
   const current = captureWindow.getBounds();
   const x = useCursor ? area.x + (area.width - width) / 2 : Math.max(area.x + 16, Math.min(current.x, area.x + area.width - width - 16));
   const y = useCursor ? area.y + (area.height - height) / 3 : Math.max(area.y + 20, Math.min(current.y, area.y + area.height - height - 20));
   captureWindow.setBounds({ x: Math.round(x), y: Math.round(y), width, height });
 }
 function capture() {
+  if (!captureWindow || captureWindow.isDestroyed()) return;
+  clearTimeout(captureBlurTimer);
   layoutCapture(true);
-  captureWindow.show(); captureWindow.focus(); captureWindow.webContents.send('capture-focus');
+  if (captureWindow.isMinimized()) captureWindow.restore();
+  captureWindow.show(); captureWindow.moveTop(); captureWindow.focus(); captureWindow.webContents.focus();
+  captureWindow.webContents.send('capture-focus');
+  // The compositor may focus the document after the first show. Repeat only while
+  // this panel still owns focus, so an outside click never causes focus stealing.
+  setTimeout(() => { if (!captureWindow.isDestroyed() && captureWindow.isVisible() && captureWindow.isFocused()) { captureWindow.webContents.focus(); captureWindow.webContents.send('capture-focus'); } }, 80);
+}
+function registerShortcuts() {
+  shortcutState = registerCaptureKeys(globalShortcut, () => {
+    if (Date.now() - lastShortcutAt < 300) return;
+    lastShortcutAt = Date.now();
+    if (captureWindow.isVisible() && captureWindow.isFocused()) captureWindow.hide(); else capture();
+  });
+  shortcutOK = Boolean(shortcutState.active);
+  shortcutWarning = !shortcutOK ? '两个全局快捷键均被占用，请使用托盘或快速记录按钮。' : !shortcutState.keys[0].registered ? `Ctrl+Shift+Space 已被占用；当前可用 ${shortcutState.active}。` : '';
+  tray?.setToolTip(`拾光提醒 · ${shortcutState.active || '托盘菜单'} 快速记录`);
 }
 function broadcast() { for (const win of [mainWindow, captureWindow]) if (win && !win.isDestroyed()) win.webContents.send('changed'); }
 function snapshot() {
   return { tasks: store.tasks(), records: store.records(), settings: config.public(), sync: syncStatus,
-    runtime: { shortcutOK, shortcut: 'Ctrl+Shift+Space', startupWarning, notificationWarning, material: windowMaterial(), dataPath: app.getPath('userData'), version: app.getVersion() } };
+    runtime: { shortcutOK, shortcut: shortcutState.active, shortcuts: shortcutState.keys, shortcutWarning, startupWarning, notificationWarning, material: windowMaterial(), dataPath: app.getPath('userData'), version: app.getVersion() } };
 }
 async function start() {
   nativeTheme.themeSource = 'light';
@@ -77,21 +97,25 @@ async function start() {
   nativeTheme.on('updated', () => { for (const win of [mainWindow, captureWindow]) if (!win.isDestroyed()) applyMaterial(win); broadcast(); });
   mainWindow.on('close', event => { if (!quitting && tray) { event.preventDefault(); mainWindow.hide(); } });
   captureWindow.on('close', event => { if (!quitting) { event.preventDefault(); captureWindow.hide(); } });
+  captureWindow.on('blur', () => {
+    clearTimeout(captureBlurTimer);
+    captureBlurTimer = setTimeout(() => { if (!captureWindow.isDestroyed() && !captureWindow.isFocused()) captureWindow.hide(); }, 100);
+  });
   registerIPC();
   await mainWindow.loadFile(path.join(root, 'ui/index.html'));
   await captureWindow.loadFile(path.join(root, 'ui/index.html'), { query: { capture: '1' } });
-  mainWindow.show();
+  if (!process.argv.includes('--quick-capture')) mainWindow.show();
   tray = new Tray(trayIcon()); tray.setToolTip('拾光提醒 · Ctrl+Shift+Space 快速记录');
   tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开拾光提醒', click: showMain }, { label: '快速记录', click: capture }, { type: 'separator' }, { label: '退出（停止提醒）', click: () => { quitting = true; app.quit(); } }]));
   tray.on('double-click', showMain);
-  shortcutOK = globalShortcut.register('CommandOrControl+Shift+Space', () => { if (captureWindow.isVisible() && captureWindow.isFocused()) captureWindow.hide(); else capture(); });
-  if (!shortcutOK) startupWarning += ' 全局快捷键被其他程序占用，可使用托盘快速记录。';
+  registerShortcuts();
   powerMonitor.on('resume', () => { checkDue(); void syncAll(); });
   resetPolling();
   setInterval(() => void checkDue(), 15000).unref();
   await checkDue();
   if (!smoke) void syncAll();
   broadcast();
+  if (process.argv.includes('--quick-capture')) capture();
 }
 
 function registerIPC() {
@@ -130,6 +154,7 @@ function registerIPC() {
   handle('sync', async () => { await syncAll(); return syncStatus; });
   handle('capture', () => capture());
   handle('hide-capture', () => captureWindow.hide());
+  handle('retry-shortcuts', () => { registerShortcuts(); broadcast(); return shortcutState; });
   handle('capture-layout', state => {
     if (!['input', 'preview'].includes(state)) throw new Error('无效的弹窗状态');
     const expanded = state === 'preview';
