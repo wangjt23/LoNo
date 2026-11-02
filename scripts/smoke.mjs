@@ -8,6 +8,8 @@ import assert from 'node:assert/strict';
 const dir = mkdtempSync(path.join(os.tmpdir(), 'shiguang-desktop-'));
 const artifacts = path.resolve('artifacts'); mkdirSync(artifacts, { recursive: true });
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
+const shellPaths=process.platform==='win32'?['Electron.lnk','LoNo.lnk'].map(name=>path.join(process.env.APPDATA,'Microsoft/Windows/Start Menu/Programs',name)):[];
+const shellBefore=shellPaths.map(file=>existsSync(file)?readFileSync(file).toString('base64'):null);
 const launch = () => electron.launch({ executablePath: process.env.SHIGUANG_EXECUTABLE || undefined, args: [...(process.env.SHIGUANG_EXECUTABLE ? [] : [process.env.SHIGUANG_APP || '.']), '--smoke', `--data-dir=${dir}`], env, timeout: 30000 });
 async function mainPage(app) {
   const deadline = Date.now() + 15000;
@@ -69,6 +71,11 @@ try {
     assert.equal(Boolean(identity.args), !identity.packaged);
   }
   await main.getByRole('heading', { name: '提醒总览' }).waitFor();
+  if (process.platform==='win32') {
+    assert.equal(await main.evaluate(()=>navigator.windowControlsOverlay?.visible),true,'native caption controls remain available over content');
+    assert.equal(await main.locator('.topbar').evaluate(el=>getComputedStyle(el).webkitAppRegion),'drag');
+    assert.ok(await main.locator('.today-date').evaluate(el=>el.getBoundingClientRect().right<=innerWidth-140),'date does not overlap native window controls');
+  }
   assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).settings.pollMinutes, 10, 'new profiles poll every ten minutes');
   await main.screenshot({ path: path.join(artifacts, '01-empty.png') });
   await main.locator('.new-button').click();
@@ -179,6 +186,12 @@ try {
   assert.equal(snapshot.settings.model.apiKey, ''); assert.equal(snapshot.settings.bridge.token, '');
   assert.equal(await main.evaluate(() => typeof window.require), 'undefined');
   const summaryTask = snapshot.tasks.find(t => t.source === 'manual');
+  const beforeCancel=(await main.evaluate(()=>window.reminder.invoke('snapshot'))).tasks.find(t=>t.id===summaryTask.id);
+  await main.locator(`[data-action="edit"][data-id="${summaryTask.id}"]`).first().click();
+  await main.locator('#edit-form [name="title"]').fill('点外部应取消的修改');
+  await main.mouse.click(8,120);
+  await main.waitForFunction(()=>!document.querySelector('#editor').open);
+  assert.equal((await main.evaluate(()=>window.reminder.invoke('snapshot'))).tasks.find(t=>t.id===summaryTask.id).title,beforeCancel.title);
   const beforeReview = (await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === summaryTask.id);
   await main.locator(`[data-action="edit"][data-id="${summaryTask.id}"]`).first().click();
   assert.equal(await main.locator('#editor [data-action="summarize-record"]').count(), 0, 'only unified AI review action is available');
@@ -217,6 +230,16 @@ try {
   assert.ok(summaryBox.y < originalBox.y);
   await main.screenshot({ path: path.join(artifacts, '06-ai-summary.png') });
   await main.locator('#editor [data-action="close"]').click();
+  await main.evaluate(task=>window.reminder.invoke('update-task',{id:task.id,action:'edit',fields:{title:task.title,dueAt:task.due_at,remindAt:task.remind_at,priority:'low'}}),afterReview);
+  await main.locator(`[data-action="edit"][data-id="${summaryTask.id}"]`).first().click();
+  await main.locator('[data-action="review-task"]').click();
+  await main.locator('.ai-review').waitFor();
+  await main.locator('#edit-form [name="title"]').fill('审核后提交材料（直接保存）');
+  await main.getByRole('button',{name:'修改并保存',exact:true}).click();
+  await main.getByText('提醒已更新',{exact:true}).waitFor();
+  const directlySaved=(await main.evaluate(()=>window.reminder.invoke('snapshot'))).tasks.find(t=>t.id===summaryTask.id);
+  assert.equal(directlySaved.priority,'high','save applies AI proposal without separate fill step');
+  assert.equal(directlySaved.title,'审核后提交材料（直接保存）','manual edits made after preview are retained');
   noActionReview = true;
   const infoTask = snapshot.tasks.find(t => t.source === 'wecom');
   await main.locator(`[data-action="edit"][data-id="${infoTask.id}"]`).first().click();
@@ -279,17 +302,17 @@ try {
   // Stub only OS notification delivery: exercise the real scheduler and SQLite state.
   await app.evaluate(({ Notification }) => {
     globalThis.testNotificationCalls = 0;
-    Notification.prototype.show = function () { globalThis.testNotificationCalls++; this.emit('failed', {}, 'test failure'); };
+    globalThis.lonoTestNotification.prototype.show = function () { globalThis.testNotificationCalls++; this.emit('failed', {}, 'test failure'); };
   });
   const failedDelivery = await restarted.evaluate(() => window.reminder.invoke('smoke', 'due'));
   assert.ok(failedDelivery.tasks.some(t => t.status === 'pending' && Date.parse(t.remind_at) < Date.now() && !t.notified_at), 'failed delivery is not marked sent');
-  await app.evaluate(({ Notification }) => { Notification.prototype.show = function () { globalThis.testNotificationCalls++; this.emit('show'); this.emit('close'); }; });
+  await app.evaluate(({ Notification }) => { globalThis.lonoTestNotification.prototype.show = function () { globalThis.testNotificationCalls++; this.emit('show'); this.emit('close'); }; });
   const delivered = await restarted.evaluate(() => window.reminder.invoke('smoke', 'check'));
   assert.ok(delivered.tasks.some(t => t.notified_at), 'successful notification persisted');
   await restarted.evaluate(() => window.reminder.invoke('smoke', 'check'));
   assert.equal(await app.evaluate(() => globalThis.testNotificationCalls), 2, 'failed delivery retries; successful delivery does not repeat');
   // An old visible notification must not suppress a newer schedule or acknowledge it late.
-  await app.evaluate(({ Notification }) => { globalThis.oldNotification = null; Notification.prototype.show = function () { globalThis.testNotificationCalls++; globalThis.oldNotification = this; }; });
+  await app.evaluate(({ Notification }) => { globalThis.oldNotification = null; globalThis.lonoTestNotification.prototype.show = function () { globalThis.testNotificationCalls++; globalThis.oldNotification = this; }; });
   await restarted.evaluate(() => window.reminder.invoke('smoke', 'due'));
   const oldTask = (await restarted.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.status === 'pending' && Date.parse(t.remind_at) < Date.now() && !t.notified_at);
   await restarted.evaluate(id => window.reminder.invoke('update-task', { id, action: 'snooze' }), oldTask.id);
@@ -304,12 +327,13 @@ try {
     await window.reminder.invoke('save-capture', { token: analysis.token, fields: { title: analysis.title, dueAt: analysis.dueAt, remindAt: analysis.remindAt, priority: analysis.priority } });
   });
   await restarted.locator('[data-view="memories"]').click();
-  await restarted.getByText('待确认 · 不参与分析', { exact: true }).waitFor();
+  assert.equal(await restarted.locator('#memory-filter').count(),0,'one global memory list replaces internal state filter');
+  await restarted.getByText('待核对 · 尚未记住', { exact: true }).waitFor();
   await restarted.locator('[data-action="memory-source"]').click();
   await restarted.locator('#editor').getByText('完整原文', { exact: true }).waitFor();
   await restarted.locator('#editor [data-action="close"]').click();
   await restarted.locator('[data-action="memory-approve"]').click();
-  await restarted.locator('.memory-row').getByText('已确认', { exact: true }).waitFor();
+  await restarted.locator('.memory-row').getByText('全局生效', { exact: true }).waitFor();
   const recalled = await restarted.evaluate(() => window.reminder.invoke('analyze', '提交报销发票'));
   assert.equal(recalled.memoryContext.length, 1);
   await restarted.locator('[data-action="memory-edit"]').click();
@@ -356,5 +380,6 @@ try {
   await memoryRestarted.locator('[data-view="overdue"]').click();
   assert.equal(await memoryRestarted.getByText('无日期测试材料', { exact: true }).count(), 0);
   assert.deepEqual(errors, []);
+  shellPaths.forEach((file,index)=>assert.equal((existsSync(file)?readFileSync(file).toString('base64'):null)===shellBefore[index],true,'desktop tests do not change real Windows shortcuts'));
   console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, fresh capture on dismissal and late-response isolation, Agent chat query/edit/memory/restart, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication, memory review/source/recall/edit/search/add/delete/restart', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
 } finally { if (app) await app.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

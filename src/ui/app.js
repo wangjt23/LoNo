@@ -32,7 +32,7 @@ function toast(text, error = false) { $('#toast').textContent = text; $('#toast'
 const overdue = task => isOverdue(task);
 const today = task => isToday(task);
 function modelNotice() { return data?.settings.model.enabled ? '已启用模型 · 内容将发送到配置的模型服务' : '离线分析 · 输入内容不会发送到模型服务'; }
-const titles = { chat: ['Agent 对话', '在对话中查找、理解和整理你的工作。'], all: ['提醒总览', '让每一件重要的事，都有着落。'], today: ['今日安排', '专注今天，也照顾那些尚未完成的事。'], overdue: ['已过期', '超过截止时间（未设截止时按提醒时间）的未完成事项。'], review: ['待确认', '尚无明确时间的事项，补充时间后即可安排提醒。'], done: ['已完成', '每一次完成，都值得被记住。'], sources: ['信息来源', '把分散的信息，汇聚到同一个地方。'], memories: ['工作记忆', '把常用经验留下，让下一次更从容。'], settings: ['偏好设置', '按你的工作方式，连接信息与智能。'] };
+const titles = { chat: ['Agent 对话', '在对话中查找、理解和整理你的工作。'], all: ['提醒总览', '让每一件重要的事，都有着落。'], today: ['今日安排', '专注今天，也照顾那些尚未完成的事。'], overdue: ['已过期', '超过截止时间（未设截止时按提醒时间）的未完成事项。'], review: ['待确认', '尚无明确时间的事项，补充时间后即可安排提醒。'], done: ['已完成', '每一次完成，都值得被记住。'], sources: ['信息来源', '把分散的信息，汇聚到同一个地方。'], memories: ['全局记忆', '一份记忆，聊天、邮件与快捷输入共同使用。'], settings: ['偏好设置', '按你的工作方式，连接信息与智能。'] };
 
 async function refreshOnce() {
   data = await api.invoke('snapshot');
@@ -46,8 +46,9 @@ async function refreshOnce() {
     if ((view !== 'settings' || !$('#settings-form')) && (view !== 'chat' || !$('#chat-panel'))) renderView();
   }
 }
+let editorBackdropDown = false;
 function shell() {
-  $('#app').innerHTML = `<aside class="sidebar"><div class="brand"><div class="brand-mark"><img src="brand.svg" alt=""></div><div>LoNo<small>Loop Notify</small></div></div><button class="primary new-button" data-action="capture">${icon('plus')} 快速记录 <kbd>Ctrl ⇧ Space</kbd></button><div class="nav-caption">我的提醒</div><nav aria-label="提醒列表">${[['all', 'grid', '提醒总览'], ['today', 'sun', '今日安排'], ['overdue', 'clock', '已过期'], ['review', 'clock', '待确认'], ['done', 'check', '已完成']].map(([id, i, name]) => `<button data-view="${id}">${icon(i)}<span>${name}</span><b id="count-${id}"></b></button>`).join('')}</nav><div class="nav-caption second">管理</div><nav aria-label="管理"><button data-view="chat">${icon('chat')}<span>Agent 对话</span></button><button data-view="memories">${icon('grid')}<span>工作记忆</span></button><button data-view="sources">${icon('inbox')}<span>信息来源</span></button><button data-view="settings">${icon('settings')}<span>偏好设置</span></button></nav><div class="sidebar-footer"><span class="status-dot"></span> 记录保存在此设备<small>在托盘中继续为你提醒</small></div></aside><main id="workspace"><header class="topbar"><div class="breadcrumb"><b id="crumb"></b></div><span class="today-date">${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</span></header><div id="content"></div></main><dialog id="editor"></dialog>`;
+  $('#app').innerHTML = `<aside class="sidebar"><div class="brand"><div class="brand-mark"><img src="brand.svg" alt=""></div><div>LoNo<small>Loop Notify</small></div></div><button class="primary new-button" data-action="capture">${icon('plus')} 快速记录 <kbd>Ctrl ⇧ Space</kbd></button><div class="nav-caption">我的提醒</div><nav aria-label="提醒列表">${[['all', 'grid', '提醒总览'], ['today', 'sun', '今日安排'], ['overdue', 'clock', '已过期'], ['review', 'clock', '待确认'], ['done', 'check', '已完成']].map(([id, i, name]) => `<button data-view="${id}">${icon(i)}<span>${name}</span><b id="count-${id}"></b></button>`).join('')}</nav><div class="nav-caption second">管理</div><nav aria-label="管理"><button data-view="chat">${icon('chat')}<span>Agent 对话</span></button><button data-view="memories">${icon('grid')}<span>全局记忆</span></button><button data-view="sources">${icon('inbox')}<span>信息来源</span></button><button data-view="settings">${icon('settings')}<span>偏好设置</span></button></nav><div class="sidebar-footer"><span class="status-dot"></span> 记录保存在此设备<small>在托盘中继续为你提醒</small></div></aside><main id="workspace"><header class="topbar"><div class="breadcrumb"><b id="crumb"></b></div><span class="today-date">${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</span></header><div id="content"></div></main><dialog id="editor"></dialog>`;
 }
 function updateNav() {
   const active = data.tasks.filter(t => t.status !== 'done');
@@ -98,22 +99,24 @@ function renderSources() {
 function field(label, name, value, type = 'text', hint = '') { return `<label class="field"><span>${label}</span><input type="${type}" name="${name}" value="${esc(value)}" ${type === 'password' ? 'autocomplete="new-password"' : ''}>${hint ? `<small>${esc(hint)}</small>` : ''}</label>`; }
 const aiSummaryMarkup = (id, analysis) => renderAiSummary(id, analysis);
 
-const memoryKinds = { preference: '习惯偏好', person: '人物分工', workflow: '工作流程', fact: '长期事实' };
-let memoryQuery = '', memoryFilter = 'active';
+let memoryQuery = '';
 function memoryContextMarkup(analysis) {
   return analysis.memoryContext?.length ? `<details><summary>本次提供给模型的记忆（${analysis.memoryContext.length}）</summary>${analysis.memoryContext.map(m => `<p>${esc(m.content)}</p>`).join('')}</details>` : '';
 }
 function renderMemories() {
-  $('#view-content').innerHTML = `<div class="info-box"><h3>助理的工作记忆，由你掌握</h3><p>新记录会用本地规则发现候选；也可以从「信息来源」主动调用模型提取。确认后，相关记忆才会提供给模型辅助分析。当前按关键词和中文词片检索；未接模型时不据此更改提醒。</p><button class="primary" data-action="memory-new">${icon('plus')} 添加记忆</button></div><section class="task-panel"><div class="panel-header"><h2>记忆库</h2><label class="search">${icon('search')}<input id="memory-search" placeholder="搜索人物、流程或偏好" value="${esc(memoryQuery)}" aria-label="搜索记忆"></label><select id="memory-filter" aria-label="记忆状态"><option value="active">候选与已确认</option><option value="candidate">待确认</option><option value="approved">已确认</option><option value="dismissed">已忽略</option></select></div><div id="memory-list"></div></section><p class="bottom-note">启用模型时，相关的已确认记忆会随原文发送到配置的服务。历史分析保留当时的记忆依据。</p>`;
-  $('#memory-filter').value = memoryFilter; renderMemoryList();
+  $('#view-content').innerHTML = '<div class="memory-intro"><div><h3>记住你的工作方式</h3><p>所有场景共享同一份记忆，你可以随时补充和修改。</p></div><button class="primary" data-action="memory-new">' + icon('plus') + ' 添加记忆</button></div><section class="task-panel"><div class="panel-header"><h2>全局记忆</h2><label class="search">' + icon('search') + '<input id="memory-search" placeholder="搜索记忆" value="' + esc(memoryQuery) + '" aria-label="搜索记忆"></label></div><div id="memory-list"></div></section><div id="memory-suggestions"></div><p class="bottom-note">已记住的内容会按相关性用于聊天、邮件分析和快捷输入。</p>';
+  renderMemoryList();
 }
 function renderMemoryList() {
-  const list = data.memories.filter(m => (memoryFilter === 'active' ? m.status !== 'dismissed' : m.status === memoryFilter) && m.content.toLowerCase().includes(memoryQuery.toLowerCase()));
-  $('#memory-list').innerHTML = list.length ? list.map(m => `<article class="memory-row"><div class="task-meta"><span class="source-label">${memoryKinds[m.kind]}</span><span class="${m.status === 'candidate' ? 'review-badge' : ''}">${m.status === 'approved' ? '已确认' : m.status === 'dismissed' ? '已忽略' : '待确认 · 不参与分析'}</span></div><p class="raw-text">${esc(m.content)}</p><div class="button-row">${m.status !== 'approved' ? `<button class="text-button" data-action="memory-approve" data-id="${m.id}">确认记住</button>` : ''}${m.status === 'candidate' ? `<button class="text-button" data-action="memory-dismiss" data-id="${m.id}">忽略</button>` : ''}<button class="text-button" data-action="memory-edit" data-id="${m.id}">编辑</button>${m.record_id ? `<button class="text-button" data-action="memory-source" data-id="${m.id}">查看来源</button>` : '<small>手动添加</small>'}</div></article>`).join('') : '<div class="small-empty">还没有匹配的记忆。添加常用偏好，或从来源记录提取工作流程。</div>';
+  const list=data.memories.filter(m=>m.content.toLowerCase().includes(memoryQuery.toLowerCase()));
+  const row=m=>'<article class="memory-row"><div class="task-meta"><span class="' + (m.status==='candidate'?'review-badge':'') + '">' + (m.status==='candidate'?'待核对 · 尚未记住':'全局生效') + '</span></div><p class="raw-text">' + esc(m.content) + '</p><div class="button-row">' + (m.status==='candidate'?'<button class="text-button" data-action="memory-approve" data-id="'+m.id+'">记住</button><button class="text-button" data-action="memory-dismiss" data-id="'+m.id+'">忽略</button>':'') + '<button class="text-button" data-action="memory-edit" data-id="'+m.id+'">编辑</button>' + (m.record_id?'<button class="text-button" data-action="memory-source" data-id="'+m.id+'">查看来源</button>':'<small>手动添加</small>') + '</div></article>';
+  const active=list.filter(m=>m.status==='approved'),suggestions=list.filter(m=>m.status==='candidate');
+  $('#memory-list').innerHTML=active.length?active.map(row).join(''):'<div class="small-empty">还没有匹配的全局记忆。记下一条习惯或经验，让 LoNo 更了解你。</div>';
+  $('#memory-suggestions').innerHTML=suggestions.length?'<section class="memory-suggestions"><header><h3>新发现</h3><small>'+suggestions.length+' 条内容，核对后即可加入全局记忆</small></header>'+suggestions.map(row).join('')+'</section>':'';
 }
 function openMemory(id) {
-  const m = data.memories.find(m => m.id === id) || { kind: 'workflow', content: '', status: 'approved' };
-  $('#editor').innerHTML = `<form id="memory-form" data-memory-id="${esc(id || '')}"><div class="dialog-header"><h2>${id ? '编辑记忆' : '添加工作记忆'}</h2><button type="button" class="close-button" data-action="close">×</button></div><label class="field"><span>类型</span><select name="kind">${Object.entries(memoryKinds).map(([key, label]) => `<option value="${key}" ${m.kind === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field"><span>记住什么</span><textarea name="content" rows="5" maxlength="1000" required placeholder="例如：报销流程通常先整理发票，再提交部门审核">${esc(m.content)}</textarea></label><label class="field"><span>状态</span><select name="status">${[['candidate', '待确认'], ['approved', '已确认，可参与分析'], ['dismissed', '已忽略']].map(([key, label]) => `<option value="${key}" ${m.status === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><div class="button-row end">${id ? `<button type="button" class="secondary" data-action="memory-delete" data-id="${id}">删除记忆</button>` : ''}<button type="submit" class="primary">保存记忆</button></div></form>`;
+  const m=data.memories.find(m=>m.id===id)||{kind:'fact',content:''};
+  $('#editor').innerHTML='<form id="memory-form" data-memory-id="'+esc(id||'')+'"><div class="dialog-header"><h2>'+(id?'编辑记忆':'添加全局记忆')+'</h2><button type="button" class="close-button" data-action="close">×</button></div><input type="hidden" name="kind" value="'+esc(m.kind)+'"><input type="hidden" name="status" value="approved"><label class="field"><span>希望 LoNo 记住什么</span><textarea name="content" rows="5" maxlength="1000" required placeholder="例如：重要会议通常提前一天提醒我">'+esc(m.content)+'</textarea></label><p class="memory-hint">保存后，聊天、邮件分析和快捷输入都可以使用这条记忆。</p><div class="button-row end">'+(id?'<button type="button" class="secondary" data-action="memory-delete" data-id="'+id+'">删除记忆</button>':'')+'<button type="submit" class="primary">保存记忆</button></div></form>';
   $('#editor').showModal();
 }
 function openExchangeTest(draft = {}) {
@@ -144,12 +147,20 @@ function openEdit(id) {
   editing = data.tasks.find(t => t.id === id);
   if (!editing) return;
   const a = JSON.parse(editing.analysis);
-  $('#editor').innerHTML = `<form id="edit-form"><div class="dialog-header"><h2>提醒详情</h2><button type="button" class="secondary review-button" data-action="review-task" ${data.settings.model.enabled ? '' : 'disabled'} title="根据原文重新判断，不沿用旧分析">AI 整理</button><button type="button" class="close-button" data-action="close">×</button></div>${fieldsMarkup({ title: editing.title, dueAt: editing.due_at, remindAt: editing.remind_at, priority: editing.priority })}<div id="task-review" aria-live="polite"></div><div class="analysis-note"><strong>${a.engine === 'model' ? '模型分析' : '本地分析'}</strong><p>${esc(a.reason)}</p>${memoryContextMarkup(a)}${a.warning ? `<p class="warning">${esc(a.warning)}</p>` : ''}</div>${aiSummaryMarkup(editing.record_id, a)}<details class="original" open><summary>原始信息 · ${labels[editing.source]} ${esc(editing.sender)}</summary><p class="raw-text">${esc(readableSource(editing.text))}</p></details><div class="button-row end">${editing.status !== 'done' ? '<button type="button" class="secondary" data-action="snooze-current">15 分钟后再提醒</button>' : ''}<button class="primary" type="submit">保存修改</button></div></form>`;
+  $('#editor').innerHTML = `<form id="edit-form"><div class="dialog-header"><h2>提醒详情</h2><button type="button" class="secondary review-button" data-action="review-task" ${data.settings.model.enabled ? '' : 'disabled'} title="根据原文重新判断，不沿用旧分析">AI 整理</button><button type="button" class="close-button" data-action="close">×</button></div>${fieldsMarkup({ title: editing.title, dueAt: editing.due_at, remindAt: editing.remind_at, priority: editing.priority })}<div id="task-review" aria-live="polite"></div><div class="analysis-note"><strong>${a.engine === 'model' ? '模型分析' : '本地分析'}</strong><p>${esc(a.reason)}</p>${memoryContextMarkup(a)}${a.warning ? `<p class="warning">${esc(a.warning)}</p>` : ''}</div>${aiSummaryMarkup(editing.record_id, a)}<details class="original" open><summary>原始信息 · ${labels[editing.source]} ${esc(editing.sender)}</summary><p class="raw-text">${esc(readableSource(editing.text))}</p></details><div class="button-row end">${editing.status !== 'done' ? '<button type="button" class="secondary" data-action="snooze-current">15 分钟后再提醒</button>' : ''}<button class="primary" type="submit">修改并保存</button></div></form>`;
   $('#editor').showModal();
 }
 function getTaskFields(form) { const f = new FormData(form); return { title: f.get('title'), priority: f.get('priority'), dueAt: iso(f.get('dueAt')), remindAt: iso(f.get('remindAt')) }; }
 
+document.addEventListener('pointerdown', event => {
+  const dialog=$('#editor'); editorBackdropDown=false;
+  if (dialog?.open && event.target===dialog) { const r=dialog.getBoundingClientRect(); editorBackdropDown=event.clientX<r.left || event.clientX>r.right || event.clientY<r.top || event.clientY>r.bottom; }
+});
+document.addEventListener('close', event => { if(event.target.id==='editor') { editingSession++; reviewResult=null; pendingReview=null; editing=null; } }, true);
 document.addEventListener('click', async event => {
+  const dialog = $('#editor');
+  if (editorBackdropDown && event.target === dialog) { editorBackdropDown = false; dialog.close(); return; }
+  editorBackdropDown = false;
   const nav = event.target.closest('[data-view]');
   if (nav) { view = nav.dataset.view; query = ''; updateNav(); renderView(); if (view === 'chat') await loadChat(); return; }
   const button = event.target.closest('[data-action]'); if (!button) return;
@@ -192,7 +203,7 @@ document.addEventListener('click', async event => {
       try {
         const result = await api.invoke('review-task', id);
         if (session !== editingSession || !$('#editor').open || !$('#task-review')) return;
-        reviewResult = result; $('#task-review').innerHTML = renderTaskReview(result, currentFields);
+        reviewResult = { ...result, baseFields: currentFields }; pendingReview = null; $('#task-review').innerHTML = renderTaskReview(result, currentFields);
         for (const el of $('#editor').querySelectorAll('.analysis-note, .ai-summary')) el.hidden = true;
       } finally { button.disabled = false; button.textContent = 'AI 整理'; }
     }
@@ -202,9 +213,9 @@ document.addEventListener('click', async event => {
       form.elements.namedItem('title').value = a.title; form.elements.namedItem('priority').value = a.priority;
       form.elements.namedItem('dueAt').value = inputDate(a.dueAt); form.elements.namedItem('remindAt').value = inputDate(a.remindAt);
       pendingReview = reviewResult;
-      $('#task-review').innerHTML = '<p class="review-applied">建议已填入，摘要将一并更新。可继续修改，确认后点击「保存修改」；尚未写入记录。</p>' + aiSummaryMarkup(editing.record_id, a);
+      $('#task-review').innerHTML = '<p class="review-applied">建议已填入，摘要将一并更新。可继续修改，确认后点击「修改并保存」；尚未写入记录。</p>' + aiSummaryMarkup(editing.record_id, a);
     }
-    if (action === 'cancel-task-review') { reviewResult = null; $('#task-review').innerHTML = ''; for (const el of $('#editor').querySelectorAll('.analysis-note, .ai-summary')) el.hidden = false; }
+    if (action === 'cancel-task-review') { reviewResult = null; pendingReview = null; $('#task-review').innerHTML = ''; for (const el of $('#editor').querySelectorAll('.analysis-note, .ai-summary')) el.hidden = false; }
     if (action === 'dismiss-task-review') {
       if (!reviewResult || reviewResult.taskId !== editing.id) throw new Error('请重新 AI 整理');
       button.disabled = true;
@@ -248,7 +259,6 @@ document.addEventListener('click', async event => {
 });
 document.addEventListener('input', event => {
   if (event.target.id === 'memory-search') { memoryQuery = event.target.value; renderMemoryList(); }
-  if (event.target.id === 'memory-filter') { memoryFilter = event.target.value; renderMemoryList(); }
   if (event.target.id === 'search') { query = event.target.value; renderTaskList(); }
   if (event.target.id === 'chat-input') chatDraft = event.target.value;
   if (event.target.id === 'capture-text') { captureRevision++; resetCapturePreview(); }
@@ -290,7 +300,15 @@ document.addEventListener('submit', async event => {
       await api.invoke('capture-layout', 'input'); await api.invoke('hide-capture');
     }
     if (form.id === 'edit-form') {
-      if (pendingReview?.taskId === editing.id) await api.invoke('apply-task-review', { token: pendingReview.token, fields: getTaskFields(form), decision: 'keep' });
+      const proposal = pendingReview || reviewResult;
+      if (proposal?.taskId === editing.id) {
+        let fields = getTaskFields(form);
+        if (!pendingReview) {
+          const a=proposal.analysis, suggested={title:a.title,dueAt:a.dueAt,remindAt:a.remindAt,priority:a.priority};
+          fields=Object.fromEntries(Object.entries(suggested).map(([key,value])=>[key,fields[key]!==proposal.baseFields[key]?fields[key]:value]));
+        }
+        await api.invoke('apply-task-review',{token:proposal.token,fields,decision:'keep'});
+      }
       else await api.invoke('update-task', { id: editing.id, action: 'edit', fields: getTaskFields(form) });
       $('#editor').close(); toast('提醒已更新');
     }

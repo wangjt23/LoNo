@@ -12,14 +12,34 @@ import { extractMemories } from '../../src/core/memory.js';
 import { summarizeSource } from '../../src/core/summary.js';
 const profile = process.argv.find(a => a.startsWith('--profile='))?.slice(10);
 if (!profile) throw new Error('需要 profile；不接收密钥参数');
-app.setPath('userData', fs.mkdtempSync(path.join(app.getPath('temp'), 'lono-model-probe-')));
+const probeProfile = fs.mkdtempSync(path.join(app.getPath('temp'), 'lono-model-probe-'));
+// Async safeStorage needs the profile's DPAPI-protected os_crypt key. Reuse
+// only that encrypted context locally, while keeping cache/locks independent.
+const stateFile = path.join(profile, 'Local State');
+if (fs.existsSync(stateFile)) {
+  const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+  if (state.os_crypt) fs.writeFileSync(path.join(probeProfile, 'Local State'), JSON.stringify({ os_crypt: state.os_crypt }));
+}
+app.setPath('userData', probeProfile);
 app.whenReady().then(async () => {
+  let stage = 'config';
   try {
     const config = new Config(path.join(profile, 'settings.json'), safeStorage); await config.load();
-    if (process.argv.includes('--chat-only')) {
+    if (process.argv.includes('--chat-only') || process.argv.includes('--chat-followup-only')) {
       const store = await Store.open(), chat = new ChatStore(store);
       const {id} = store.ingest({text:'请提交合成测试项目报告'},analyzeLocal('请提交合成测试项目报告',new Date(),true));
       const service = new ChatService(store,chat,()=>config.value.model);
+      if (process.argv.includes('--chat-followup-only')) {
+        stage='first-analysis';
+        await service.send('先找到合成测试项目报告，建议将重要程度提高为high，但这轮只给文字建议，不要生成修改操作。');
+        if (chat.messages().at(-1).actions.length) throw new Error('应先只分析');
+        stage='followup'; await service.send('可以，按你的建议来吧。');
+        const action=chat.messages().at(-1).actions[0];
+        if (!action || action.taskId!==id || action.fields?.priority!=='high' || store.task(id).priority==='high') throw new Error('未正确接续历史建议');
+        chat.resolve(action.id,'apply');
+        console.log(JSON.stringify({connected:true,analysisThenApproval:true,confirmedChange:store.task(id).priority==='high',syntheticInputOnly:true}));
+        store.close();app.quit();return;
+      }
       await service.send('帮我找到合成测试项目报告，把重要程度改为high，只生成建议，不要猜测时间。');
       const proposal = chat.messages().at(-1).actions[0];
       if (!proposal || store.task(id).priority === 'high') throw new Error('未生成独立修改建议');
@@ -55,5 +75,5 @@ app.whenReady().then(async () => {
     const real = row ? await analyze(row.text, { source: 'email', sender: row.sender, now: new Date(row.received_at), model: config.value.model }) : null;
     console.log(JSON.stringify({ connected: true, model: config.value.model.model, synthetic: { engine: result.engine, titleSummarized: result.title !== sample.split('\n')[0], title: result.title, dueAt: result.dueAt, remindAt: result.remindAt, priority: result.priority }, memoryExtraction: memory.engine, candidateCount: memory.memories.length, realEmail: real ? { engine: real.engine, validStructuredResult: !real.warning, shouldRemind: real.shouldRemind } : null }));
     app.quit();
-  } catch { console.log(JSON.stringify({ connected: false, message: '模型验证未完成；未输出密钥或邮件正文' })); app.exit(1); }
+  } catch (error) { console.log(JSON.stringify({ connected: false, stage, errorType:error.name, detail:stage==='config'||/^(未正确|应先|Agent|模型未|模型请求|查询轮数)/.test(error.message)?error.message:undefined, message: '模型验证未完成；未输出密钥或邮件正文' })); app.exit(1); }
 });

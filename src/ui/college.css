@@ -40,6 +40,8 @@ nav button.active b { color: #98647f; }
   box-shadow: inset 1px 0 0 #ffffffa6;
 }
 .topbar { background: #ffffff27; border-color: #881e5509; }
+.topbar { -webkit-app-region: drag; padding-right: 160px; }
+.topbar button, .topbar a, .topbar input { -webkit-app-region: no-drag; }
 .breadcrumb b { color: #77646f; }
 h1 { color: var(--college-ink); font-weight: 650; letter-spacing: -.7px; }
 .page-heading p { color: #81747c; }
@@ -168,4 +170,41 @@ dialog::backdrop { background: #30202b28; }
 .chat-composer > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
 .chat-composer small { color: #9b8592; font-size: 10px; } .chat-thinking { color: #a26a8b; font-size: 12px; }
 @media (forced-colors: active) { .chat-panel, .chat-action, .chat-memory, .chat-composer { background: Canvas; border: 1px solid CanvasText; } .chat-text, .chat-orbit, .chat-reference { color: CanvasText; } }
+
+/* Conversation lives in the workspace; only the composer has its own surface. */
+#content.chat-page { max-width: none; width: 100%; padding: 0 !important; }
+.chat-page .page-heading { display: none; }
+.chat-page .runtime-notice, .chat-page > .warning { margin: 12px 28px 0; }
+.chat-page .chat-panel { max-width: none; width: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.chat-intro { max-width: 900px; width: 100%; margin: 0 auto; padding: 20px 24px 10px; border: 0; }
+.chat-intro .chat-orbit { width: 28px; height: 28px; font-size: 23px; background: transparent; }
+.chat-intro small { display: none; }
+.chat-intro strong { font-size: 13px; font-weight: 550; color: #705b67; }
+.chat-scroll { padding: 22px max(28px, calc((100% - 860px) / 2)) 32px; scrollbar-width: thin; scrollbar-color: #b69aab66 transparent; }
+.chat-message { max-width: 100%; margin-bottom: 32px; }
+.chat-message.user { width: fit-content; min-width: 60px; max-width: 78%; }
+.chat-message.user .chat-text { border-radius: 18px 18px 5px 18px; padding: 11px 17px; background: #eadde773; }
+.chat-text { font-size: 14px; line-height: 1.9; }
+.chat-citations { margin: 10px 0; font-size: 11px; color: #9a7e8f; }
+.chat-citations > summary { cursor: pointer; width: fit-content; }
+.chat-references { margin-top: 9px; }
+.chat-reference { background: #f1e7ee66; }
+.chat-composer { width: calc(100% - 48px); max-width: 900px; margin: 0 auto 20px; padding: 12px 16px; border: 1px solid #ffffffb8; border-radius: 20px; background: #ffffffa6; backdrop-filter: blur(24px); box-shadow: 0 6px 28px #58243c0a, 0 1px 4px #58243c05; }
+.chat-composer:focus-within { border-color: #d5a5c366; box-shadow: 0 8px 30px #58243c0a; }
+.chat-composer textarea { background: transparent; padding: 5px 4px; min-height: 52px; max-height: 120px; outline: none; }
+.chat-composer textarea:focus-visible { outline: none; }
+.chat-composer .primary { min-height: 33px; border-radius: 12px; font-size: 12px; }
+.chat-empty { padding-top: 9vh; }
+.chat-empty h2 { font-size: 30px; font-weight: 500; letter-spacing: -.8px; }
+.chat-examples button { background: #ffffff45; border-color: #881e550d; }
+.memory-intro { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.memory-intro h3 { margin: 0 0 7px; font-size: 16px; font-weight: 550; }
+.memory-intro p, .memory-hint { margin: 0; font-size: 12px; color: #907b87; line-height: 1.7; }
+.memory-hint { margin: 12px 0 20px; }
+.memory-suggestions { margin-top: 24px; border-top: 1px solid #881e5512; padding-top: 16px; }
+.memory-suggestions header { display: flex; align-items: center; gap: 12px; color: #947888; padding: 0 20px; }
+.memory-suggestions header h3 { font-size: 13px; font-weight: 550; margin: 0; }
+.memory-suggestions header small { font-size: 11px; }
+@media (prefers-reduced-transparency: reduce) { .chat-composer { background: #fcf9fb; backdrop-filter: none; } }
+@media (forced-colors: active) { .chat-composer { background: Canvas; border-color: CanvasText; } .chat-intro strong, .chat-citations, .memory-intro p { color: CanvasText; } }
 @media (forced-colors: active) { .ai-summary { background: Canvas; border-color: CanvasText; } .ai-summary-head strong, .summary-overview, .summary-points, .summary-points li::marker, .ai-summary small, .summary-empty { color: CanvasText; } }

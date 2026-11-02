@@ -89,3 +89,54 @@ test('agent searches use UI time classifications and approved memories only; que
   assert.equal(readOnly.query({type:'search',scope:'tasks',query:'',status:'review'},opened,refs).total,1);
   assert.equal(readOnly.query({type:'search',scope:'tasks',query:'',status:'overdue'},opened,refs).total,0);f.store.close();
 });
+
+test('follow-up approval keeps complete references across restart and repairs shortened duplicate targets by re-reading current records',async()=>{
+  let round=0,id;
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'lono-chat-followup-')),filename=path.join(dir,'test.sqlite');
+  let f=await setup(async()=>++round===1?{calls:[{type:'search',scope:'tasks',query:'项目'}]}:{reply:'建议完成这条项目记录，等待你同意。'},filename);id=f.id;
+  await f.service.send('先检查项目记录，给出建议');
+  f.store.close();
+  const store=await Store.open(filename),chat=new ChatStore(store);
+  store.updateTask(id,'edit',{title:'新的项目报告标题',dueAt:null,remindAt:null,priority:'low'});
+  let calls=0;
+  const service=new ChatService(store,chat,()=>({enabled:true}),{request:async(_model,messages)=>{
+    if(++calls===1){
+      const history=messages.find(m=>m.role==='assistant');
+      assert.equal(JSON.parse(history.content).references[0].id,id);
+      return {reply:'按上次建议处理',changes:[{taskId:id.slice(0,8)+'...',action:'complete'},{taskId:id.slice(0,8)+'...',action:'complete'}]};
+    }
+    const feedback=JSON.parse(messages.at(-1).content);
+    assert.ok(feedback.VALIDATION_ISSUES.some(i=>i.code==='DUPLICATE_TARGET'));
+    assert.equal(feedback.LOCAL_QUERY_RESULT[0].record.title,'新的项目报告标题');
+    return {reply:'已重读最新记录，请确认标记完成。',changes:[{taskId:id,action:'complete'}]};
+  }});
+  await service.send('可以，按你的建议来吧');
+  const action=chat.messages().at(-1).actions[0];
+  assert.equal(action.title,'新的项目报告标题');assert.notEqual(store.task(id).status,'done');
+  chat.resolve(action.id,'apply');assert.equal(store.task(id).status,'done');store.close();
+});
+
+test('search pagination covers later records and date filtering happens before pagination',async()=>{
+  const f=await setup(async()=>({reply:'ok'}));
+  for(let i=0;i<25;i++)f.store.ingest({text:'分页项目'+i},analyzeLocal('提醒提交分页项目',new Date(),true),{title:'分页项目'+i,dueAt:i===24?'2026-11-03T08:00:00Z':'2026-10-01T08:00:00Z',remindAt:null,priority:'medium'});
+  const call={type:'search',scope:'tasks',status:'all',query:'分页项目'},opened=new Map(),refs=new Map();
+  let result=f.service.query(call,opened,refs),ids=new Set();
+  while(true){result.items.forEach(i=>ids.add(i.id));if(!result.hasMore)break;result=f.service.query({...call,offset:result.nextOffset},opened,refs);}
+  assert.equal(ids.size,25);
+  const tomorrow=f.service.query({...call,from:'2026-11-03T00:00:00+08:00',before:'2026-11-04T00:00:00+08:00'},opened,refs);
+  assert.equal(tomorrow.total,1);assert.equal(tomorrow.items[0].title,'分页项目24');
+  assert.equal(tomorrow.items[0].analysis.engine,'local');
+  const original=f.service.query({type:'read',scope:'tasks',id:tomorrow.items[0].id},opened,refs);
+  assert.equal(original.record.analysis.engine,'local');f.store.close();
+});
+
+test('invalid structured suggestions receive bounded correction feedback instead of immediate failure',async()=>{
+  let calls=0;
+  const f=await setup(async(_model,messages)=>{
+    if(++calls===1)return {reply:'需要删除',changes:[{taskId:'bad',action:'delete'}]};
+    assert.ok(JSON.parse(messages.at(-1).content).VALIDATION_ISSUES.length);
+    return {reply:'当前不支持删除，可以先核对后标记完成。'};
+  });
+  const before=f.store.tasks();await f.service.send('按建议整理');
+  assert.equal(calls,2);assert.deepEqual(f.store.tasks(),before);assert.equal(f.chat.messages().at(-1).detail.error,undefined);f.store.close();
+});

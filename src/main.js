@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, Notification, powerMonitor, safeStorage, dialog, screen, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, Notification as SystemNotification, powerMonitor, safeStorage, dialog, screen, nativeTheme, shell } from 'electron';
 import { release } from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -18,10 +18,13 @@ import { MessageService } from './core/message-service.js';
 import { TaskReviewService } from './core/task-review-service.js';
 import { ChatStore } from './core/chat-store.js';
 import { ChatService } from './core/chat-service.js';
+import { TestNotification } from './core/test-notification.js';
 import { configureWindowsIdentity, WINDOWS_APP_ID, WINDOWS_TOAST_CLSID } from './windows-shell.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const smoke = process.argv.includes('--smoke');
+const Notification = smoke ? TestNotification : SystemNotification;
+if (smoke) globalThis.lonoTestNotification = TestNotification;
 const exchangeTestMode = process.argv.includes('--exchange-test');
 const launchValue = key => process.argv.find(a => a.startsWith(`--${key}=`))?.slice(key.length + 3) || '';
 const dataArg = process.argv.find(a => a.startsWith('--data-dir='));
@@ -59,6 +62,7 @@ function applyMaterial(win) {
   const material = windowMaterial();
   win.setBackgroundColor(material === 'opaque' ? '#f5f5f7' : '#00000000');
   if (supportsAcrylic) win.setBackgroundMaterial(material === 'acrylic' ? 'acrylic' : 'none');
+  if (process.platform === 'win32' && win === mainWindow) win.setTitleBarOverlay({ color: '#00000000', symbolColor: nativeTheme.shouldUseHighContrastColors && nativeTheme.shouldUseDarkColors ? '#ffffff' : '#65505d', height: 42 });
   if (process.platform === 'darwin') win.setVibrancy(material === 'vibrancy' ? 'under-window' : null);
 }
 function windowOptions(extra = {}) {
@@ -136,7 +140,7 @@ async function start() {
   chatStore = new ChatStore(store);
   chatAgent = new ChatService(store, chatStore, () => config.value.model);
   startupPhase = 'windows';
-  mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: 'LoNo · Loop Notify', show: false }));
+  mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: 'LoNo · Loop Notify', show: false, ...(process.platform === 'win32' ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: '#65505d', height: 42 } } : {}) }));
   if (process.platform === 'win32') {
     try { await configureWindowsIdentity(mainWindow, { app, shell, isolated: smoke || exchangeTestMode || Boolean(dataArg) }); }
     catch (error) { startupWarning = [startupWarning, `Windows 图标设置未完成：${error.message}`].filter(Boolean).join('；'); }

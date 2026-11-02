@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { brandIco } from './core/brand.js';
+import { brandIconSet } from './core/brand.js';
 import { trayIcon } from './icon.js';
 import { Notification } from 'electron';
 
@@ -11,8 +11,8 @@ export const WINDOWS_TOAST_CLSID = '{04C012C4-7BE6-48E1-92C2-D73B85AE814F}';
 
 // The window icon alone does not identify the app to Explorer. Keep the shell
 // icon outside app.asar and associate the same AppID with the window and link.
-export async function configureWindowsIdentity(win, { app, shell, isolated = false, executable = process.execPath }) {
-  const bytes = brandIco();
+export async function configureWindowsIdentity(win, { app, shell, isolated = false, executable = process.execPath, initializeNotifications = true }) {
+  const bytes = brandIconSet();
   const digest = createHash('sha256').update(bytes).digest('hex').slice(0, 12);
   const iconDir = path.join(app.getPath('userData'), 'icons');
   fs.mkdirSync(iconDir, { recursive: true });
@@ -30,7 +30,14 @@ export async function configureWindowsIdentity(win, { app, shell, isolated = fal
       execFileSync(registry, ['add', key, '/v', name, '/t', 'REG_SZ', '/d', value, '/f'], { windowsHide: true, timeout: 5000, stdio: 'ignore' });
     }
   }
-  const target = executable;
+  let target = executable;
+  if (!isolated && app.isPackaged && process.env.ProgramData) {
+    const sharedLink = path.join(process.env.ProgramData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'LoNo.lnk');
+    if (fs.existsSync(sharedLink)) {
+      const installed = shell.readShortcutLink(sharedLink);
+      if (installed.appUserModelId === WINDOWS_APP_ID && path.basename(installed.target).toLowerCase() === 'lono.exe' && fs.existsSync(installed.target)) target = installed.target;
+    }
+  }
   const args = app.isPackaged ? '' : `"${app.getAppPath()}"`;
   win.setAppDetails({ appId: WINDOWS_APP_ID, appIconPath: icon, appIconIndex: 0,
     relaunchCommand: `"${target}"${args ? ` ${args}` : ''}`, relaunchDisplayName: 'LoNo' });
@@ -57,6 +64,7 @@ export async function configureWindowsIdentity(win, { app, shell, isolated = fal
       fs.renameSync(alias, path.join(backups, `Electron-${Date.now()}.lnk`));
     };
     if (fs.existsSync(alias) && shell.readShortcutLink(alias).appUserModelId === WINDOWS_APP_ID) archiveAlias();
+    if (initializeNotifications) {
     const warmup = new Notification({ title: 'LoNo' });
     const deadline = Date.now() + 2500;
     while (Date.now() < deadline) {
@@ -67,9 +75,15 @@ export async function configureWindowsIdentity(win, { app, shell, isolated = fal
           break;
         }
       }
+      const nativeLink = shell.readShortcutLink(shortcut);
+      if (nativeLink.target.toLowerCase() === process.execPath.toLowerCase() && nativeLink.toastActivatorClsid?.toUpperCase() === WINDOWS_TOAST_CLSID) break;
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     warmup.close();
+    }
+    // Presenter initialization may rewrite LoNo.lnk using the current EXE and
+    // drop its icon. Restore the chosen installed target and explicit icon last.
+    if (!shell.writeShortcutLink(shortcut, 'replace', details)) throw new Error('无法恢复 LoNo 开始菜单图标');
     const desktop = path.join(app.getPath('desktop'), 'LoNo.lnk');
     if (fs.existsSync(desktop) && owned(desktop) && !shell.writeShortcutLink(desktop, 'replace', details)) throw new Error('无法更新 LoNo 桌面图标');
   }
