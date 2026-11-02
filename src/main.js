@@ -10,7 +10,8 @@ import { Config } from './core/config.js';
 import { pollMail, pollBridge, bridgeSchema, identity } from './core/connectors.js';
 import { trayIcon } from './icon.js';
 import { registerCaptureKeys } from './core/shortcuts.js';
-import { testExchange } from './core/exchange.js';
+import { testExchangeLocally } from './exchange-transport.js';
+import { extractMemories } from './core/memory.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const smoke = process.argv.includes('--smoke');
@@ -85,7 +86,7 @@ function registerShortcuts() {
 }
 function broadcast() { for (const win of [mainWindow, captureWindow]) if (win && !win.isDestroyed()) win.webContents.send('changed'); }
 function snapshot() {
-  return { tasks: store.tasks(), records: store.records(), settings: config.public(), sync: syncStatus,
+  return { tasks: store.tasks(), records: store.records(), memories: store.memories(), settings: config.public(), sync: syncStatus,
     runtime: { shortcutOK, shortcut: shortcutState.active, shortcuts: shortcutState.keys, shortcutWarning, startupWarning, notificationWarning, material: windowMaterial(), dataPath: app.getPath('userData'), version: app.getVersion() } };
 }
 async function start() {
@@ -128,10 +129,24 @@ function registerIPC() {
     catch (error) { return { ok: false, error: error.name === 'ZodError' ? '输入格式无效，请检查日期、地址或必填项' : error.message || '操作失败' }; }
   });
   handle('snapshot', snapshot);
-  handle('test-exchange', input => testExchange(input));
+  handle('save-memory', input => { const id = store.saveMemory(input); broadcast(); return id; });
+  handle('delete-memory', id => { store.deleteMemory(id); broadcast(); });
+  handle('memory-source', id => {
+    const memory = store.memories().find(m => m.id === id);
+    if (!memory) throw new Error('找不到记忆');
+    return { memory, record: memory.record_id ? store.record(memory.record_id) : null };
+  });
+  handle('extract-memories', async id => {
+    const record = store.record(id);
+    if (!record) throw new Error('找不到来源记录');
+    const result = await extractMemories(record.text, { model: config.value.model });
+    const count = store.addMemoryCandidates(id, result.memories); broadcast();
+    return { count, warning: result.warning, engine: result.engine };
+  });
+  handle('test-exchange', input => testExchangeLocally(input));
   handle('analyze', async text => {
     if (previews.size > 100) previews.delete(previews.keys().next().value);
-    const analysis = await analyze(text, { manual: true, model: config.value.model });
+    const analysis = await analyze(text, { manual: true, model: config.value.model, memories: typeof text === 'string' ? store.recall(text) : [] });
     const token = randomUUID(); previews.set(token, { text: text.trim(), analysis, expires: Date.now() + 30 * 60000 });
     return { token, ...analysis };
   });
@@ -172,7 +187,7 @@ function registerIPC() {
   });
   handle('export', async () => {
     const target = await dialog.showSaveDialog(mainWindow, { title: '导出本地记录（不含凭据）', defaultPath: 'shiguang-backup.json', filters: [{ name: 'JSON', extensions: ['json'] }] });
-    if (!target.canceled) fs.writeFileSync(target.filePath, JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), tasks: store.tasks(), records: store.records(null) }, null, 2));
+    if (!target.canceled) fs.writeFileSync(target.filePath, JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), tasks: store.tasks(), records: store.records(null), memories: store.memories() }, null, 2));
     return !target.canceled;
   });
   handle('import', async () => {
@@ -200,7 +215,7 @@ async function consume(message) {
   if (store.hasRecord(message.key)) return { duplicate: true };
   const received = new Date(message.receivedAt);
   // Relative dates refer to when a message was sent/received, not the later sync time.
-  const analysis = await analyze(message.text, { now: received, model: config.value.model });
+  const analysis = await analyze(message.text, { now: received, model: config.value.model, memories: store.recall(message.text) });
   return store.ingest(message, analysis);
 }
 async function syncAll() {

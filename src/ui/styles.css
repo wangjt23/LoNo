@@ -200,3 +200,11 @@ dialog { background: #f9faffed; border-color: #ffffffb3; }
 @keyframes capture-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .capture-submit:disabled { animation: none; } }
 .exchange-intro { font-size: 12px; line-height: 1.8; color: #6f7888; margin: 0 0 20px; } #exchange-test-result { font-size: 12px; line-height: 1.8; color: #526b85; }
+
+.memory-row { padding: 22px 26px; border-bottom: 1px solid var(--border, #e5e5e8); }
+.memory-row:last-child { border-bottom: 0; }
+.memory-row .raw-text { margin: 14px 0; line-height: 1.7; }
+#memory-filter { max-width: 170px; }
+#memory-form .field { margin-bottom: 18px; }
+#memory-form textarea { width: 100%; resize: vertical; font: inherit; padding: 12px; border: 1px solid #d5d5db; border-radius: 10px; background: #ffffff80; }
+#memory-filter { border: 0; border-radius: 9px; padding: 8px 12px; background: #f1f3f880; color: #636975; font: inherit; font-size: 12px; }

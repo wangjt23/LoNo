@@ -177,6 +177,40 @@ try {
   const countBeforeNewSchedule = await app.evaluate(() => globalThis.testNotificationCalls);
   await restarted.evaluate(() => window.reminder.invoke('smoke', 'due'));
   assert.equal(await app.evaluate(() => globalThis.testNotificationCalls), countBeforeNewSchedule + 1, 'old visible notification does not block a snoozed schedule');
+  // Exercise memory review through the real renderer and IPC on this isolated profile.
+  await restarted.evaluate(async () => {
+    const analysis = await window.reminder.invoke('analyze', '报销流程通常先整理发票，再提交部门审核');
+    await window.reminder.invoke('save-capture', { token: analysis.token, fields: { title: analysis.title, dueAt: analysis.dueAt, remindAt: analysis.remindAt, priority: analysis.priority } });
+  });
+  await restarted.locator('[data-view="memories"]').click();
+  await restarted.getByText('待确认 · 不参与分析', { exact: true }).waitFor();
+  await restarted.locator('[data-action="memory-source"]').click();
+  await restarted.locator('#editor').getByText('完整原文', { exact: true }).waitFor();
+  await restarted.locator('#editor [data-action="close"]').click();
+  await restarted.locator('[data-action="memory-approve"]').click();
+  await restarted.locator('.memory-row').getByText('已确认', { exact: true }).waitFor();
+  const recalled = await restarted.evaluate(() => window.reminder.invoke('analyze', '提交报销发票'));
+  assert.equal(recalled.memoryContext.length, 1);
+  await restarted.locator('[data-action="memory-edit"]').click();
+  await restarted.locator('#memory-form textarea').fill('报销流程先提交电子发票，再由部门审核');
+  await restarted.locator('#memory-form [type="submit"]').click();
+  await restarted.getByText('报销流程先提交电子发票，再由部门审核', { exact: true }).waitFor();
+  await restarted.locator('#memory-search').fill('不匹配的词');
+  assert.equal(await restarted.locator('.memory-row').count(), 0);
+  await restarted.locator('#memory-search').fill('');
+  await restarted.locator('[data-action="memory-new"]').click();
+  await restarted.locator('#memory-form textarea').fill('会议材料通常提前一天整理');
+  await restarted.locator('#memory-form [type="submit"]').click();
+  await restarted.getByText('会议材料通常提前一天整理', { exact: true }).waitFor();
+  await restarted.locator('.memory-row').filter({ hasText: '会议材料通常提前一天整理' }).locator('[data-action="memory-edit"]').click();
+  await restarted.locator('[data-action="memory-delete"]').click();
+  await restarted.getByText('记忆已删除；历史分析记录仍保留当时的依据', { exact: true }).waitFor();
+  await app.close(); app = await launch();
+  const memoryRestarted = await mainPage(app);
+  await memoryRestarted.locator('[data-view="memories"]').click();
+  await memoryRestarted.getByText('报销流程先提交电子发票，再由部门审核', { exact: true }).waitFor();
+  assert.equal(await memoryRestarted.locator('.memory-row').count(), 1, 'confirmed memories persist and deleted memories stay deleted');
+  await memoryRestarted.screenshot({ path: path.join(artifacts, '05-memory.png') });
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, Escape draft retention, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, Escape draft retention, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication, memory review/source/recall/edit/search/add/delete/restart', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
 } finally { if (app) await app.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

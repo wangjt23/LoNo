@@ -1,5 +1,3 @@
-import { spawn } from 'node:child_process';
-import path from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import { z } from 'zod';
 import { validateEndpoint } from './analyzer.js';
@@ -8,48 +6,54 @@ export const exchangeInput = z.object({
   endpoint: z.string().max(2000), user: z.string().trim().min(1).max(300),
   password: z.string().min(1).max(4000), domain: z.string().trim().max(200).default(''),
 });
-const quote = value => '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r/g, '\\r').replace(/\n/g, '\\n') + '"';
 const envelope = '<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><s:Header><t:RequestServerVersion Version="Exchange2013"/></s:Header><s:Body><m:GetFolder><m:FolderShape><t:BaseShape>Default</t:BaseShape></m:FolderShape><m:FolderIds><t:DistinguishedFolderId Id="inbox"/></m:FolderIds></m:GetFolder></s:Body></s:Envelope>';
 
-export function exchangeCurlConfig(input) {
+export function exchangeRequestOptions(input) {
   const v = exchangeInput.parse(input); const url = validateEndpoint(v.endpoint);
   if (url.protocol !== 'https:') throw new Error('Exchange 凭据测试仅允许 HTTPS');
   if (url.hash) throw new Error('请填写 EWS 地址，不是网页登录链接');
   if (v.user.includes(':')) throw new Error('账号中不能含冒号');
-  const user = v.domain && !v.user.includes('\\') ? `${v.domain}\\${v.user}` : v.user;
-  return [
-    `url = ${quote(url.href)}`, `user = ${quote(`${user}:${v.password}`)}`,
-    'request = "POST"', 'header = "Content-Type: text/xml; charset=utf-8"',
-    'header = "SOAPAction: http://schemas.microsoft.com/exchange/services/2006/messages/GetFolder"',
-    `data = ${quote(envelope)}`, 'connect-timeout = 10', 'max-time = 25',
-    'max-filesize = 2097152', 'proto = "=https"',
-  ].join('\n') + '\n';
+  return { url: url.href, method: 'POST', redirect: 'error', credentials: 'include', cache: 'no-store' };
 }
 
-// Credentials travel only over stdin, never argv, environment, logs or a temp file.
-// Windows curl uses the OS TLS/SSPI implementation and supports Exchange NTLM.
-export function requestExchange(input) {
-  const config = exchangeCurlConfig(input);
-  const executable = process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'curl.exe') : 'curl';
+// The factory is Electron net.request in production; credentials are supplied only
+// to a matching server's auth challenge, never placed in URL/headers/files/logs.
+export function requestExchange(input, createRequest) {
+  const value = exchangeInput.parse(input);
+  const options = exchangeRequestOptions(value); const url = new URL(options.url);
+  const user = value.domain && !value.user.includes('\\') ? `${value.domain}\\${value.user}` : value.user;
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, ['--disable', '--silent', '--show-error', '--http1.1', '--ntlm', '--config', '-', '--write-out', '\nSHIGUANG_STATUS:%{http_code}'], { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-    const chunks = []; let size = 0, settled = false;
-    const fail = message => { if (!settled) { settled = true; clearTimeout(timer); child.kill(); reject(new Error(message)); } };
+    let request, settled = false, authAttempts = 0;
+    const fail = message => { if (!settled) { settled = true; clearTimeout(timer); request?.abort(); reject(new Error(message)); } };
     const timer = setTimeout(() => fail('Exchange 测试超时，请检查网络或服务器地址'), 30000);
-    child.once('error', () => fail('无法启动系统 curl；请检查本机是否具备支持 NTLM 的 curl'));
-    child.stdin.on('error', () => fail('Exchange 请求未能发送'));
-    child.stdout.on('data', chunk => { size += chunk.length; if (size > 2 * 1024 * 1024 + 100) fail('Exchange 响应超过大小限制'); else chunks.push(chunk); });
-    child.stderr.resume(); // Never surface arbitrary server/transport diagnostic text.
-    child.once('close', code => {
-      if (settled) return;
-      clearTimeout(timer); settled = true;
-      if (code !== 0) return reject(new Error(`Exchange 网络或证书验证失败（curl ${code}）；没有关闭 TLS 校验`));
-      const output = Buffer.concat(chunks).toString('utf8');
-      const match = /\nSHIGUANG_STATUS:(\d{3})$/.exec(output);
-      if (!match) return reject(new Error('Exchange 返回格式无效'));
-      resolve({ status: Number(match[1]), body: output.slice(0, match.index) });
-    });
-    child.stdin.end(config);
+    try {
+      request = createRequest(options);
+      request.setHeader('Content-Type', 'text/xml; charset=utf-8');
+      request.setHeader('SOAPAction', 'http://schemas.microsoft.com/exchange/services/2006/messages/GetFolder');
+      request.on('login', (auth, callback) => {
+        if (settled || auth.isProxy || auth.host.toLowerCase() !== url.hostname.toLowerCase() || Number(auth.port) !== Number(url.port || 443) || !['ntlm', 'negotiate'].includes(auth.scheme?.toLowerCase())) {
+          callback(); fail('Exchange 返回了不匹配的认证请求，已停止传递凭据'); return;
+        }
+        if (authAttempts++ > 0) { callback(); fail('Exchange 认证未通过，已停止重复尝试；请核对账号、域、密码及服务器认证策略'); return; }
+        callback(user, value.password);
+      });
+      request.on('error', error => {
+        const code = /net::(ERR_[A-Z_]+)/.exec(error.message || '')?.[1];
+        fail(code?.startsWith('ERR_CERT') ? `Exchange 证书验证失败（${code}），未放宽 TLS 校验` : code?.includes('AUTH') ? `Exchange 认证未完成（${code}），未自动重试` : `Exchange 网络连接失败${code ? `（${code}）` : ''}`);
+      });
+      request.on('redirect', () => fail('EWS 地址发生重定向，已停止请求，请确认实际接口地址'));
+      request.on('response', response => {
+        const chunks = []; let size = 0;
+        response.on('data', chunk => { size += chunk.length; if (size > 2 * 1024 * 1024) fail('Exchange 响应超过大小限制'); else chunks.push(Buffer.from(chunk)); });
+        response.on('error', () => fail('Exchange 响应读取失败'));
+        response.on('aborted', () => fail('Exchange 响应中断'));
+        response.on('end', () => {
+          if (settled) return; settled = true; clearTimeout(timer);
+          resolve({ status: response.statusCode, body: Buffer.concat(chunks).toString('utf8') });
+        });
+      });
+      request.end(envelope);
+    } catch { fail('无法创建 Exchange 网络请求'); }
   });
 }
 
@@ -71,7 +75,7 @@ export function parseExchangeFolder({ status, body }) {
   return { connected: true, total, unread };
 }
 
-export async function testExchange(input, transport = requestExchange) {
-  exchangeInput.parse(input); exchangeCurlConfig(input); // Validate before credentials reach any transport.
+export async function testExchange(input, transport) {
+  exchangeInput.parse(input); exchangeRequestOptions(input); // Validate before credentials reach any transport.
   return parseExchangeFolder(await transport(input));
 }

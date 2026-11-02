@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { memoryInput, memoryKey, extractLocalMemories, retrieveMemories } from './memory.js';
 
 export const taskInput = z.object({
   title: z.string().trim().min(1).max(160),
@@ -24,6 +25,7 @@ export class Store {
       CREATE INDEX IF NOT EXISTS task_reminders ON tasks(status, remind_at);
       CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
     if (!this.all('PRAGMA table_info(tasks)').some(column => column.name === 'revision')) db.run('ALTER TABLE tasks ADD COLUMN revision INTEGER NOT NULL DEFAULT 0');
+    db.run(`CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, record_id TEXT, kind TEXT NOT NULL, content TEXT NOT NULL, evidence TEXT NOT NULL, status TEXT NOT NULL, content_key TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`);
     this.persist();
   }
   all(sql, params = []) {
@@ -60,6 +62,7 @@ export class Store {
     return this.transaction(() => {
       const recordId = randomUUID(); const id = randomUUID(); const now = new Date().toISOString();
       this.db.run('INSERT INTO records VALUES (?,?,?,?,?,?,?)', [recordId, key, source, sender, text, receivedAt, JSON.stringify(analysis)]);
+      this.insertMemoryCandidates(recordId, extractLocalMemories(text));
       if (analysis.shouldRemind) {
         const status = fields.remindAt && analysis.confidence >= 0.7 && (!fields.dueAt || Date.parse(fields.dueAt) > Date.now()) ? 'pending' : 'review';
         this.db.run('INSERT INTO tasks (id,record_id,title,due_at,remind_at,priority,status,notified_at,created_at,completed_at) VALUES (?,?,?,?,?,?,?,?,?,?)', [id, recordId, fields.title, fields.dueAt, fields.remindAt, fields.priority, override && fields.remindAt ? 'pending' : status, null, now, null]);
@@ -69,6 +72,41 @@ export class Store {
   }
   tasks() { return this.all(`SELECT t.*, r.source, r.sender, r.text, r.analysis FROM tasks t JOIN records r ON r.id=t.record_id ORDER BY CASE status WHEN 'review' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, COALESCE(remind_at,'9999'), created_at DESC`); }
   records(limit = 500) { return this.all(`SELECT * FROM records ORDER BY received_at DESC${limit ? ' LIMIT ?' : ''}`, limit ? [limit] : []); }
+  record(id) { return this.all('SELECT * FROM records WHERE id=?', [id])[0]; }
+  memories() { return this.all('SELECT * FROM memories ORDER BY updated_at DESC, id'); }
+  recall(text) { return retrieveMemories(this.memories(), text); }
+  insertMemoryCandidates(recordId, candidates) {
+    const record = this.record(recordId);
+    if (!record) throw new Error('找不到记忆来源');
+    let count = 0;
+    for (const candidate of candidates.slice(0, 8)) {
+      const m = memoryInput.parse(candidate);
+      if (typeof candidate.evidence !== 'string' || !candidate.evidence || !record.text.includes(candidate.evidence)) throw new Error('记忆证据必须来自原文');
+      const now = new Date().toISOString();
+      this.db.run('INSERT OR IGNORE INTO memories VALUES (?,?,?,?,?,?,?,?,?)', [randomUUID(), recordId, m.kind, m.content, candidate.evidence, 'candidate', memoryKey(m.content), now, now]);
+      count += this.db.getRowsModified();
+    }
+    return count;
+  }
+  addMemoryCandidates(recordId, candidates) { return this.transaction(() => this.insertMemoryCandidates(recordId, candidates)); }
+  saveMemory({ id, kind, content, status = 'approved' }) {
+    const m = memoryInput.parse({ kind, content });
+    z.enum(['candidate', 'approved', 'dismissed']).parse(status);
+    return this.transaction(() => {
+      const now = new Date().toISOString();
+      const duplicate = this.all('SELECT id FROM memories WHERE content_key=?', [memoryKey(m.content)])[0];
+      if (duplicate && duplicate.id !== id) throw new Error('这条记忆已经存在，请编辑已有记忆');
+      if (id) {
+        if (!this.all('SELECT id FROM memories WHERE id=?', [id]).length) throw new Error('找不到记忆');
+        this.db.run('UPDATE memories SET kind=?,content=?,status=?,content_key=?,updated_at=? WHERE id=?', [m.kind, m.content, status, memoryKey(m.content), now, id]);
+      } else {
+        id = randomUUID();
+        this.db.run('INSERT INTO memories VALUES (?,?,?,?,?,?,?,?,?)', [id, null, m.kind, m.content, '', status, memoryKey(m.content), now, now]);
+      }
+      return id;
+    });
+  }
+  deleteMemory(id) { return this.transaction(() => this.db.run('DELETE FROM memories WHERE id=?', [id])); }
   updateTask(id, action, fields) {
     return this.transaction(() => {
     const current = this.all('SELECT * FROM tasks WHERE id=?', [id])[0];
