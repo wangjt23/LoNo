@@ -1,5 +1,6 @@
-# LoNo 0.3.6
+# LoNo 0.3.7
 
+- 信息来源的“配置连接”直接定位到对应邮箱或企业微信设置，短暂高亮并支持键盘聚焦。
 - GitHub Actions 构建并测试 Windows x64、macOS Apple Silicon 和 Intel 版本，全部成功后自动发布。
 - Windows 提供安装版 EXE 和免安装 ZIP；Mac 提供对应架构 DMG，拖入 Applications 后运行。
 - 合并 Mac 菜单、Command 快捷键、菜单栏图标及平台 API 适配。

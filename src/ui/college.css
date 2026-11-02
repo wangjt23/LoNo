@@ -47,6 +47,8 @@ nav button.active b { color: #98647f; }
 *::-webkit-scrollbar { display: none; width: 0; height: 0; }
 *::-webkit-scrollbar-button { display: none; }
 .topbar button, .topbar a, .topbar input { -webkit-app-region: no-drag; }
+.settings-card { scroll-margin-top: 96px; }
+.settings-card.settings-target { outline: 2px solid #d14aa480; outline-offset: 4px; box-shadow: 0 0 0 8px #d14aa40b; }
 .breadcrumb b { color: #77646f; }
 h1 { color: var(--college-ink); font-weight: 650; letter-spacing: -.7px; }
 .page-heading p { color: #81747c; }

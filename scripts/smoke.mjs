@@ -158,7 +158,17 @@ try {
   await main.locator('#edit-form [name="title"]').fill('提交项目材料（已核对）');
   await main.locator('#edit-form button[type="submit"]').click();
   await main.getByText('提交项目材料（已核对）', { exact: true }).waitFor();
+  for (const section of ['bridge', 'mail']) {
+    await main.locator('nav [data-view="sources"]').click();
+    await main.locator(`[data-settings-section="${section}"]`).click();
+    assert.equal(await main.locator(`#settings-${section}`).evaluate(el => document.activeElement === el), true, 'connection link focuses its own settings section');
+    assert.equal(await main.locator(`#settings-${section}`).evaluate(el => {
+      const rect = el.getBoundingClientRect(), header = document.querySelector('.topbar').getBoundingClientRect();
+      return rect.top >= header.bottom - 1 && rect.top < innerHeight / 2;
+    }), true, 'connection section is visible below the sticky header');
+  }
   await main.locator('[data-view="settings"]').click();
+  assert.equal(await main.evaluate(() => scrollY), 0, 'normal preferences navigation starts at the top');
   await main.locator('[name="bridge.enabled"]').check();
   await main.locator('[name="bridge.endpoint"]').fill(`${url}/messages`);
   await main.locator('[name="bridge.token"]').fill('bridge-test-secret');
