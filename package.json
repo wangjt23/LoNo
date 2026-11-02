@@ -1,8 +1,8 @@
 {
   "name": "shiguang-reminder",
-  "version": "0.2.2",
+  "version": "0.2.5",
   "description": "本地优先的智能工作提醒助手",
-  "author": "Shiguang contributors",
+  "author": "LoNo contributors",
   "private": true,
   "type": "module",
   "main": "src/main.js",
@@ -36,7 +36,7 @@
   },
   "build": {
     "appId": "com.shiguang.reminder",
-    "productName": "Shiguang Reminder",
+    "productName": "LoNo",
     "directories": {
       "output": "release"
     },
@@ -51,7 +51,7 @@
       "signAndEditExecutable": false
     },
     "portable": {
-      "artifactName": "Shiguang-Reminder-${version}-win-x64.exe"
+      "artifactName": "LoNo-${version}-win-x64.exe"
     },
     "mac": {
       "target": "dmg"

@@ -42,6 +42,7 @@ try {
   const main = await mainPage(app);
   main.on('pageerror', error => errors.push(error.message));
   await main.getByRole('heading', { name: '提醒总览' }).waitFor();
+  assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).settings.pollMinutes, 10, 'new profiles poll every ten minutes');
   await main.screenshot({ path: path.join(artifacts, '01-empty.png') });
   await main.locator('.new-button').click();
   const capture = app.windows().find(w => w.url().includes('capture=1'));
@@ -211,6 +212,17 @@ try {
   await memoryRestarted.getByText('报销流程先提交电子发票，再由部门审核', { exact: true }).waitFor();
   assert.equal(await memoryRestarted.locator('.memory-row').count(), 1, 'confirmed memories persist and deleted memories stay deleted');
   await memoryRestarted.screenshot({ path: path.join(artifacts, '05-memory.png') });
+  await memoryRestarted.evaluate(async () => {
+    const analysis = await window.reminder.invoke('analyze', '提交过期测试材料');
+    await window.reminder.invoke('save-capture', { token: analysis.token, fields: { title: '过期测试材料', dueAt: new Date(Date.now() - 86400000).toISOString(), remindAt: null, priority: 'medium' } });
+  });
+  await memoryRestarted.locator('[data-view="today"]').click();
+  assert.equal(await memoryRestarted.getByText('过期测试材料', { exact: true }).count(), 0);
+  await memoryRestarted.locator('[data-view="overdue"]').click();
+  await memoryRestarted.getByText('过期测试材料', { exact: true }).waitFor();
+  assert.equal(await memoryRestarted.locator('.task-row').count(), 1);
+  await memoryRestarted.locator('[data-action="complete"]').click();
+  await memoryRestarted.getByText('没有过期的未完成事项', { exact: true }).waitFor();
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, Escape draft retention, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication, memory review/source/recall/edit/search/add/delete/restart', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
 } finally { if (app) await app.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

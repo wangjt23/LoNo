@@ -43,7 +43,7 @@ const cue = async (title, subtitle, hold = 2000) => {
       let el = document.querySelector('#demo-caption');
       if (!el) { el = document.createElement('div'); el.id = 'demo-caption'; el.style.cssText = 'position:fixed;bottom:22px;left:245px;right:24px;z-index:2147483647;padding:18px 24px;border:1px solid #ffffff90;border-radius:18px;background:#132135eb;color:white;box-shadow:0 10px 40px #0002;pointer-events:none;font-family:Segoe UI,Microsoft YaHei,sans-serif;'; document.body.append(el); }
       el.replaceChildren();
-      const label = document.createElement('div'); label.textContent = '拾光 · 产品演示 / 模拟邮箱与模型'; label.style.cssText = 'font-size:11px;color:#a8c5e6;letter-spacing:1px;margin-bottom:6px';
+      const label = document.createElement('div'); label.textContent = 'LoNo · 产品演示 / 模拟邮箱与模型'; label.style.cssText = 'font-size:11px;color:#a8c5e6;letter-spacing:1px;margin-bottom:6px';
       const h = document.createElement('div'); h.textContent = title; h.style.cssText = 'font-size:20px;font-weight:600;margin-bottom:5px';
       const p = document.createElement('div'); p.textContent = subtitle; p.style.cssText = 'font-size:13px;color:#ced9e7;line-height:1.6';
       el.append(label, h, p);
@@ -70,7 +70,7 @@ try {
   await main.locator('[name="model.enabled"]').check();
   await main.locator('[name="model.endpoint"]').fill('http://127.0.0.1:' + server.address().port + '/chat/completions');
   await main.locator('[name="model.model"]').fill('demo-model');
-  await main.locator('[name="pollMinutes"]').fill('1');
+  await main.locator('[name="pollMinutes"]').fill(timed ? '1' : '10');
   await cue('01 / 连接单位自建 Exchange', '选择 EWS、填写账号；密码使用系统密钥加密保存。演示账号为虚构数据。', 3000);
   await main.locator('#settings-form [type="submit"]').click();
   await main.getByText('设置已安全保存', { exact: true }).waitFor();

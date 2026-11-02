@@ -46,7 +46,7 @@ test('settings retain existing secrets, reject invalid config and fail closed wi
     assert.equal(c.public().model.apiKey, ''); assert.equal(c.public().model.hasApiKey, true);
     await c.save(c.public()); assert.equal(c.value.model.apiKey, 'secret');
     const reloaded = new Config(c.filename, safe); await reloaded.load(); assert.equal(reloaded.value.model.apiKey, 'secret');
-    const invalid = c.public(); invalid.pollMinutes = 0; await assert.rejects(c.save(invalid)); assert.equal(c.value.pollMinutes, 5);
+    const invalid = c.public(); invalid.pollMinutes = 0; await assert.rejects(c.save(invalid)); assert.equal(c.value.pollMinutes, 10);
     safe.isAsyncEncryptionAvailable = async () => false;
     await assert.rejects(c.save(c.public()), /加密不可用/);
     const cleared = c.public(); cleared.model.clearSecret = true; await c.save(cleared); assert.equal(c.value.model.apiKey, '');

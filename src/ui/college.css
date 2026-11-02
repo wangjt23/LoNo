@@ -109,3 +109,5 @@ dialog::backdrop { background: #30202b28; }
   .sidebar, #workspace, .task-panel, .stats article, .settings-card, .connection-card, .capture-content { background: Canvas; color: CanvasText; border-color: CanvasText; backdrop-filter: none; }
   .brand-mark, .task-title, .text-button, .source-label, .engine-badge, .spotlight-search, .capture-content #capture-text { color: CanvasText; }
 }
+
+.brand-mark { background: transparent; border: 0; box-shadow: none; } .brand-mark img { width: 37px; height: 37px; display: block; border-radius: 11px; } .brand { font-family: 'Segoe UI Variable', 'Segoe UI', sans-serif; letter-spacing: -.5px; } .brand small { letter-spacing: 1px; font-size: 10px; }

@@ -20,12 +20,15 @@ const smoke = process.argv.includes('--smoke');
 const exchangeTestMode = process.argv.includes('--exchange-test');
 const launchValue = key => process.argv.find(a => a.startsWith(`--${key}=`))?.slice(key.length + 3) || '';
 const dataArg = process.argv.find(a => a.startsWith('--data-dir='));
-if (dataArg) app.setPath('userData', path.resolve(dataArg.slice(11)));
+// The public brand can change without moving databases or OS-encrypted secrets.
+app.setPath('userData', dataArg ? path.resolve(dataArg.slice(11)) : path.join(app.getPath('appData'), 'shiguang-reminder'));
+app.setName('LoNo');
 app.setAppUserModelId('com.shiguang.reminder');
 let mainWindow, captureWindow, tray, store, config, timer, quitting = false, syncing = false, captureExpanded = false;
 let shortcutOK = false, startupWarning = '', notificationWarning = '', notificationBusy = false;
 let shortcutState = { keys: [], active: null }, shortcutWarning = '', lastShortcutAt = 0;
 let captureBlurTimer;
+let startupPhase = 'data', captureReady = false, captureLoading = null, captureWarning = '';
 const previews = new Map();
 const notifications = new Set();
 const syncStatus = { email: { state: 'idle', message: '尚未同步' }, wecom: { state: 'idle', message: '尚未同步' } };
@@ -33,7 +36,11 @@ const syncStatus = { email: { state: 'idle', message: '尚未同步' }, wecom: {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', (_event, argv) => { if (argv.includes('--quick-capture')) capture(); else showMain(); });
-  app.whenReady().then(start).catch(error => { dialog.showErrorBox('拾光提醒启动失败', `未能加载本地数据，请保留数据目录并重试。\n${error.message}`); app.quit(); });
+  app.whenReady().then(start).catch(error => {
+    if (quitting) return; // Window navigation may reject during an intentional exit.
+    dialog.showErrorBox('LoNo 启动失败', `${startupPhase === 'data' ? '未能打开本地记录，请保留数据目录并重试。' : '主界面未能加载，请重新启动或检查应用文件是否完整。'}\n${error.message}`);
+    quitting = true; app.quit();
+  });
 }
 
 const supportsAcrylic = process.platform === 'win32' && Number(release().split('.')[2]) >= 22621;
@@ -55,7 +62,7 @@ function secureWindow(win) {
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
 }
-function showMain() { if (mainWindow) { mainWindow.show(); mainWindow.restore(); mainWindow.focus(); } }
+function showMain() { if (!quitting && mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.restore(); mainWindow.focus(); } }
 function layoutCapture(useCursor = false) {
   const area = useCursor ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea : screen.getDisplayMatching(captureWindow.getBounds()).workArea;
   const width = Math.min(680, area.width - 32);
@@ -65,8 +72,25 @@ function layoutCapture(useCursor = false) {
   const y = useCursor ? area.y + (area.height - height) / 3 : Math.max(area.y + 20, Math.min(current.y, area.y + area.height - height - 20));
   captureWindow.setBounds({ x: Math.round(x), y: Math.round(y), width, height });
 }
-function capture() {
-  if (!captureWindow || captureWindow.isDestroyed()) return;
+async function ensureCapturePage() {
+  if (quitting || !captureWindow || captureWindow.isDestroyed()) return false;
+  if (captureReady) return true;
+  if (captureLoading) return captureLoading;
+  captureLoading = (async () => {
+    try {
+      await captureWindow.loadFile(path.join(root, 'ui/index.html'), { query: { capture: '1' } });
+      if (quitting || captureWindow.isDestroyed()) return false;
+      captureReady = true; captureWarning = ''; broadcast(); return true;
+    } catch {
+      if (!quitting) { captureWarning = '快捷输入暂时无法加载；主界面仍可使用。再次点击快速记录会重试。'; broadcast(); }
+      return false;
+    } finally { captureLoading = null; }
+  })();
+  return captureLoading;
+}
+async function capture() {
+  if (!await ensureCapturePage()) { if (!quitting) showMain(); return false; }
+  if (quitting || captureWindow.isDestroyed()) return false;
   clearTimeout(captureBlurTimer);
   layoutCapture(true);
   if (captureWindow.isMinimized()) captureWindow.restore();
@@ -75,6 +99,7 @@ function capture() {
   // The compositor may focus the document after the first show. Repeat only while
   // this panel still owns focus, so an outside click never causes focus stealing.
   setTimeout(() => { if (!captureWindow.isDestroyed() && captureWindow.isVisible() && captureWindow.isFocused()) { captureWindow.webContents.focus(); captureWindow.webContents.send('capture-focus'); } }, 80);
+  return true;
 }
 function registerShortcuts() {
   shortcutState = registerCaptureKeys(globalShortcut, () => {
@@ -84,24 +109,31 @@ function registerShortcuts() {
   });
   shortcutOK = Boolean(shortcutState.active);
   shortcutWarning = !shortcutOK ? '两个全局快捷键均被占用，请使用托盘或快速记录按钮。' : !shortcutState.keys[0].registered ? `Ctrl+Shift+Space 已被占用；当前可用 ${shortcutState.active}。` : '';
-  tray?.setToolTip(`拾光提醒 · ${shortcutState.active || '托盘菜单'} 快速记录`);
+  tray?.setToolTip(`LoNo · ${shortcutState.active || '托盘菜单'} 快速记录`);
 }
 function broadcast() { for (const win of [mainWindow, captureWindow]) if (win && !win.isDestroyed()) win.webContents.send('changed'); }
 function snapshot() {
   return { tasks: store.tasks(), records: store.records(), memories: store.memories(), settings: config.public(), sync: syncStatus,
-    runtime: { shortcutOK, shortcut: shortcutState.active, shortcuts: shortcutState.keys, shortcutWarning, startupWarning, notificationWarning, material: windowMaterial(), dataPath: app.getPath('userData'), version: app.getVersion() } };
+    runtime: { shortcutOK, shortcut: shortcutState.active, shortcuts: shortcutState.keys, shortcutWarning, startupWarning, captureWarning, notificationWarning, material: windowMaterial(), dataPath: app.getPath('userData'), version: app.getVersion() } };
 }
 async function start() {
   nativeTheme.themeSource = 'light';
   store = await Store.open(path.join(app.getPath('userData'), 'reminders.sqlite'));
+  if (quitting) return;
   config = new Config(path.join(app.getPath('userData'), 'settings.json'), safeStorage);
   try { await config.load(); } catch { startupWarning = '设置或系统密钥无法读取，本次使用离线模式；原设置文件已保留。请先备份，再重新配置。'; }
-  mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: '拾光提醒 · Shiguang', show: false }));
-  captureWindow = new BrowserWindow(windowOptions({ width: 680, height: 340, title: '快速记录 · 拾光提醒', frame: false, hasShadow: true, roundedCorners: true, backgroundColor: '#f7f7f9', alwaysOnTop: true, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, show: false }));
+  if (quitting) return;
+  startupPhase = 'windows';
+  mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: 'LoNo · Loop Notify', show: false }));
+  captureWindow = new BrowserWindow(windowOptions({ width: 680, height: 340, title: '快速记录 · LoNo', frame: false, hasShadow: true, roundedCorners: true, backgroundColor: '#f7f7f9', alwaysOnTop: true, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, show: false }));
   for (const win of [mainWindow, captureWindow]) { secureWindow(win); win.setMenuBarVisibility(false); }
   for (const win of [mainWindow, captureWindow]) applyMaterial(win);
   nativeTheme.on('updated', () => { for (const win of [mainWindow, captureWindow]) if (!win.isDestroyed()) applyMaterial(win); broadcast(); });
-  mainWindow.on('close', event => { if (exchangeTestMode && !quitting) { quitting = true; app.quit(); } else if (!quitting && tray) { event.preventDefault(); mainWindow.hide(); } });
+  mainWindow.on('close', event => {
+    if (quitting) return;
+    if (exchangeTestMode || !tray) { quitting = true; app.quit(); }
+    else { event.preventDefault(); mainWindow.hide(); }
+  });
   captureWindow.on('close', event => { if (!quitting) { event.preventDefault(); captureWindow.hide(); } });
   captureWindow.on('blur', () => {
     clearTimeout(captureBlurTimer);
@@ -109,10 +141,12 @@ async function start() {
   });
   registerIPC();
   await mainWindow.loadFile(path.join(root, 'ui/index.html'), { query: exchangeTestMode ? { exchangeTest: '1', endpoint: launchValue('endpoint'), account: launchValue('account') } : process.argv.includes('--exchange-setup') ? { exchangeSetup: '1', endpoint: launchValue('endpoint'), account: launchValue('account') } : {} });
-  await captureWindow.loadFile(path.join(root, 'ui/index.html'), { query: { capture: '1' } });
+  if (quitting) return;
+  await ensureCapturePage();
+  if (quitting || mainWindow.isDestroyed()) return;
   if (!process.argv.includes('--quick-capture')) mainWindow.show();
-  tray = new Tray(trayIcon()); tray.setToolTip('拾光提醒 · Ctrl+Shift+Space 快速记录');
-  tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开拾光提醒', click: showMain }, { label: '快速记录', click: capture }, { type: 'separator' }, { label: '退出（停止提醒）', click: () => { quitting = true; app.quit(); } }]));
+  tray = new Tray(trayIcon()); tray.setToolTip('LoNo · Ctrl+Shift+Space 快速记录');
+  tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开LoNo', click: showMain }, { label: '快速记录', click: capture }, { type: 'separator' }, { label: '退出（停止提醒）', click: () => { quitting = true; app.quit(); } }]));
   tray.on('double-click', showMain);
   if (!exchangeTestMode) registerShortcuts();
   powerMonitor.on('resume', () => { checkDue(); void syncAll(); });
@@ -196,7 +230,7 @@ function registerIPC() {
     store.setState(key, { ...store.state(key, {}), authPaused: false });
     syncStatus.email = { state: 'idle', message: '暂停已解除，下次同步会重试' }; broadcast();
   });
-  handle('capture', () => capture());
+  handle('capture', async () => { if (!await capture()) throw new Error(captureWarning || '应用正在退出'); });
   handle('hide-capture', () => captureWindow.hide());
   handle('retry-shortcuts', () => { registerShortcuts(); broadcast(); return shortcutState; });
   handle('capture-layout', state => {
@@ -308,7 +342,7 @@ async function checkDue() {
     const active = new Set([...notifications].map(n => n.taskKey).filter(Boolean));
     for (const task of store.due()) {
       if (active.has(`${task.id}:${task.revision}`)) continue;
-      sendNotification(`${task.priority === 'high' ? '重要 · ' : ''}${task.title}`, '提醒时间已到，点击打开拾光提醒。', true, task.id, task.revision);
+      sendNotification(`${task.priority === 'high' ? '重要 · ' : ''}${task.title}`, '提醒时间已到，点击打开LoNo。', true, task.id, task.revision);
     }
   } catch { notificationWarning = '检查提醒时出现错误，请检查本地数据和磁盘空间。'; broadcast(); }
   finally { notificationBusy = false; }

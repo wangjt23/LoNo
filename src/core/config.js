@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { validateEndpoint } from './analyzer.js';
 
 export const defaults = {
-  pollMinutes: 5, launchAtLogin: false,
+  pollMinutes: 10, launchAtLogin: false,
   model: { enabled: false, endpoint: '', model: '', apiKey: '' },
   mail: { enabled: false, protocol: 'imap', endpoint: '', domain: '', host: '', port: 993, user: '', password: '', mailbox: 'INBOX', extractMemory: true },
   bridge: { enabled: false, endpoint: '', token: '' },

@@ -1,3 +1,4 @@
+import { brandIco } from '../src/core/brand.js';
 // Directory distribution: no generated launcher, no patching of runtime bytes.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -5,16 +6,17 @@ import { createHash } from 'node:crypto';
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) throw new Error('版本格式无效');
 const release = path.resolve('release');
-const target = path.join(release, `College-Assistant-${pkg.version}`);
+const target = path.join(release, `LoNo-${pkg.version}`);
 const runtime = path.resolve('node_modules/electron/dist');
 const asar = path.resolve('.runtime/college-build/win-unpacked/resources/app.asar');
 if (!target.startsWith(release + path.sep) || fs.existsSync(target)) throw new Error('目标目录已存在，拒绝覆盖；请确认版本和路径');
 fs.cpSync(runtime, target, { recursive: true, errorOnExist: true, force: false });
-const executable = path.join(target, '学院工作助理.exe');
+const executable = path.join(target, 'LoNo.exe');
 fs.renameSync(path.join(target, 'electron.exe'), executable);
 fs.copyFileSync(asar, path.join(target, 'resources/app.asar'));
+fs.writeFileSync(path.join(target, 'LoNo.ico'), brandIco());
 const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const originalHash = hash(path.join(runtime, 'electron.exe'));
 if (hash(executable) !== originalHash) throw new Error('运行时校验不一致');
-fs.writeFileSync(path.join(target, '使用说明.txt'), `双击“学院工作助理.exe”启动。请保留整个目录，不能只复制EXE。\n此目录保留原版Electron运行时字节，不包含新生成的便携启动器。\n这不等于应用获得了CA代码签名；其他机器仍可能需要可信签名。\n沿用原有本地数据目录；应用名称等待选定后统一调整。\n运行时SHA256：${originalHash}\n`);
+fs.writeFileSync(path.join(target, '使用说明.txt'), `双击“LoNo.exe”启动。请保留整个目录，不能只复制EXE。\n此目录保留原版Electron运行时字节，不包含新生成的便携启动器。\n这不等于应用获得了CA代码签名；其他机器仍可能需要可信签名。\nLoop Notify。沿用原有本地数据目录，保留邮箱、模型和提醒。\n运行时SHA256：${originalHash}\n`);
 console.log(JSON.stringify({ target, executable, runtimeUnmodified: true, runtimeSha256: originalHash }));
