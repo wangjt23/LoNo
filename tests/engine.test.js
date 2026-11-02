@@ -39,7 +39,7 @@ test('timezone offsets are normalized before SQLite comparisons', async () => {
 });
 test('settings retain existing secrets, reject invalid config and fail closed without encryption', async () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'reminder-config-'));
-  const safe = { isAsyncEncryptionAvailable: async () => true, encryptStringAsync: async s => Buffer.from(s.split('').reverse().join('')), decryptStringAsync: async b => ({ result: b.toString().split('').reverse().join('') }) };
+  const safe = { getSelectedStorageBackend: () => 'gnome_libsecret', isAsyncEncryptionAvailable: async () => true, encryptStringAsync: async s => Buffer.from(s.split('').reverse().join('')), decryptStringAsync: async b => ({ result: b.toString().split('').reverse().join('') }) };
   const c = new Config(path.join(dir, 'settings.json'), safe);
   try {
     const input = c.public(); input.model.apiKey = 'secret'; await c.save(input);
