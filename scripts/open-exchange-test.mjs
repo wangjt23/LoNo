@@ -15,7 +15,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const runtime = createRequire(import.meta.url)('electron');
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
 const profile = mkdtempSync(path.join(os.tmpdir(), 'shiguang-exchange-test-'));
-const child = spawn(runtime, [root, `--data-dir=${profile}`, '--exchange-test', `--endpoint=${endpoint.href}`, `--account=${account}`], { cwd: root, env, detached: true, stdio: 'ignore', windowsHide: true });
+const child = spawn(runtime, [root, `--data-dir=${profile}`, '--exchange-test', `--endpoint=${endpoint.href}`, `--account=${account}`], { cwd: root, env, detached: true, stdio: 'ignore', windowsHide: false });
 child.on('error', () => { console.error('Exchange 测试窗口启动失败'); process.exitCode = 1; });
 child.unref();
 console.log('Exchange 本机测试窗口已启动；密码仅在窗口中输入，不写入设置文件。');
