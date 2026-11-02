@@ -18,7 +18,8 @@ async function mainPage(app) {
   }
   throw new Error('Main workspace did not load');
 }
-let bridgeCalls = 0, modelCalls = 0, modelDelay = 0;
+let bridgeCalls = 0, modelCalls = 0, modelDelay = 0, failSummary = false;
+const summaryFixture = { overview: '请提交项目材料，并核对相关要求。', keyPoints: ['行动：提交项目材料。', '时间：以原始通知为准。', '要求：核对材料清单。'] };
 const server = http.createServer((req, res) => {
   res.setHeader('Content-Type', 'application/json');
   if (req.url.startsWith('/messages')) {
@@ -29,6 +30,9 @@ const server = http.createServer((req, res) => {
     let body = ''; req.on('data', chunk => body += chunk); req.on('end', () => {
       assert.ok(JSON.parse(body).messages[1].content.includes('提交'));
       const due = new Date(Date.now() + 86400000).toISOString();
+      if (JSON.parse(body).messages[0].content.includes('你是工作信息摘要助手')) {
+        res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(failSummary ? { invalid: true } : summaryFixture) } }] })); return;
+      }
       setTimeout(() => res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ shouldRemind: true, title: '提交桥接测试材料', dueAt: due, remindAt: due, priority: 'high', confidence: 0.95, reason: '模拟模型识别到明确行动与截止日期。' }) } }] })), modelDelay);
     });
   }
@@ -134,6 +138,30 @@ try {
   assert.equal(snapshot.tasks.length, 2); assert.ok(snapshot.tasks.some(t => t.source === 'manual'));
   assert.equal(snapshot.settings.model.apiKey, ''); assert.equal(snapshot.settings.bridge.token, '');
   assert.equal(await main.evaluate(() => typeof window.require), 'undefined');
+  const summaryTask = snapshot.tasks.find(t => t.source === 'manual');
+  await main.locator(`[data-action="edit"][data-id="${summaryTask.id}"]`).first().click();
+  await main.locator('#edit-form [name="title"]').fill('临时编辑但尚未保存');
+  await main.locator('#editor [data-action="summarize-record"]').click();
+  await main.locator('#editor .summary-points li').first().waitFor();
+  assert.equal(await main.locator('#editor .summary-points li').count(), 3);
+  assert.equal(await main.locator('#edit-form [name="title"]').inputValue(), '临时编辑但尚未保存', 'summary refresh preserves unsaved edits');
+  const summarized = (await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === summaryTask.id);
+  for (const field of ['title', 'due_at', 'remind_at', 'priority', 'status', 'revision']) assert.equal(summarized[field], summaryTask[field]);
+  assert.equal(JSON.parse(summarized.analysis).summary.engine, 'model');
+  const summaryBox = await main.locator('#editor .ai-summary').boundingBox(), originalBox = await main.locator('#editor .original').boundingBox();
+  assert.ok(summaryBox.y < originalBox.y, 'AI summary appears above original information');
+  await main.screenshot({ path: path.join(artifacts, '06-ai-summary.png') });
+  failSummary = true;
+  await main.locator('#editor [data-action="summarize-record"]').click();
+  await main.locator('#toast').filter({ hasText: 'AI 摘要未生成' }).waitFor();
+  assert.equal(await main.locator('#editor .summary-points li').count(), 3, 'failed regeneration retains cached summary');
+  failSummary = false;
+  await main.locator('#editor [data-action="close"]').click();
+  const beforeReopen = modelCalls;
+  await main.locator(`[data-action="edit"][data-id="${summaryTask.id}"]`).first().click();
+  assert.equal(await main.locator('#editor .summary-points li').count(), 3);
+  assert.equal(modelCalls, beforeReopen, 'opening a cached summary does not call the model');
+  await main.locator('#editor [data-action="close"]').click();
   // Export using the actual dialog path while replacing only OS file picking.
   const exportFile = path.join(dir, 'export.json');
   await app.evaluate(({ dialog }, filename) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename }); }, exportFile);
@@ -154,6 +182,7 @@ try {
   await restarted.locator('.task-row').first().waitFor();
   assert.equal(await restarted.locator('.task-row').count(), 2, 'records survive restart');
   const restored = await restarted.evaluate(() => window.reminder.invoke('snapshot'));
+  assert.equal(JSON.parse(restored.tasks.find(t => t.id === summaryTask.id).analysis).summary.keyPoints.length, 3, 'summary survives restart');
   assert.equal(restored.settings.model.hasApiKey, true, 'OS encrypted credentials decrypt on restart');
   assert.ok(!restored.runtime.startupWarning.includes('设置或系统密钥无法读取'), 'encrypted settings load on restart even when another app owns the shortcut');
   // Stub only OS notification delivery: exercise the real scheduler and SQLite state.

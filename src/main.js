@@ -14,6 +14,8 @@ import { testExchangeLocally, pollExchangeLocally } from './exchange-transport.j
 import { mailStateKey } from './core/exchange-sync.js';
 import { exchangeInput, exchangeRequestOptions } from './core/exchange.js';
 import { extractMemories } from './core/memory.js';
+import { MessageService } from './core/message-service.js';
+import { SummaryService } from './core/summary-service.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const smoke = process.argv.includes('--smoke');
@@ -30,6 +32,7 @@ let shortcutState = { keys: [], active: null }, shortcutWarning = '', lastShortc
 let captureBlurTimer;
 let startupPhase = 'data', captureReady = false, captureLoading = null, captureWarning = '';
 const previews = new Map();
+let messages, summaries;
 const notifications = new Set();
 const syncStatus = { email: { state: 'idle', message: '尚未同步' }, wecom: { state: 'idle', message: '尚未同步' } };
 
@@ -123,6 +126,8 @@ async function start() {
   config = new Config(path.join(app.getPath('userData'), 'settings.json'), safeStorage);
   try { await config.load(); } catch { startupWarning = '设置或系统密钥无法读取，本次使用离线模式；原设置文件已保留。请先备份，再重新配置。'; }
   if (quitting) return;
+  messages = new MessageService(store, () => config.value);
+  summaries = new SummaryService(store, () => config.value.model);
   startupPhase = 'windows';
   mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: 'LoNo · Loop Notify', show: false }));
   captureWindow = new BrowserWindow(windowOptions({ width: 680, height: 340, title: '快速记录 · LoNo', frame: false, hasShadow: true, roundedCorners: true, backgroundColor: '#f7f7f9', alwaysOnTop: true, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, show: false }));
@@ -165,6 +170,7 @@ function registerIPC() {
     catch (error) { return { ok: false, error: error.name === 'ZodError' ? '输入格式无效，请检查日期、地址或必填项' : error.message || '操作失败' }; }
   });
   handle('snapshot', snapshot);
+  handle('summarize-record', async id => { const summary = await summaries.generate(id); broadcast(); return summary; });
   handle('save-memory', input => { const id = store.saveMemory(input); broadcast(); return id; });
   handle('delete-memory', id => { store.deleteMemory(id); broadcast(); });
   handle('memory-source', id => {
@@ -215,7 +221,7 @@ function registerIPC() {
     try {
       if (input.launchAtLogin !== previous.launchAtLogin) app.setLoginItemSettings({ openAtLogin: Boolean(input.launchAtLogin), path: process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe') });
     } catch {
-      await config.save(previous);
+      await config.save(previous, { retainBlankSecrets: false });
       throw new Error('未能更新系统登录启动项，设置已还原');
     }
     if (JSON.stringify(previous.mail) !== JSON.stringify(config.value.mail)) {
@@ -270,17 +276,8 @@ function registerIPC() {
 }
 
 function resetPolling() { if (timer) clearInterval(timer); timer = setInterval(() => void syncAll(), config.value.pollMinutes * 60000); timer.unref(); }
-async function consume(message) {
-  if (store.hasRecord(message.key)) return { duplicate: true };
-  const received = new Date(message.receivedAt);
-  // Relative dates refer to when a message was sent/received, not the later sync time.
-  const analysis = await analyze(message.text, { now: received, source: message.source, sender: message.sender, model: config.value.model, memories: store.recall(message.text) });
-  let memoryExtraction;
-  if (message.source === 'email' && config.value.mail.extractMemory) memoryExtraction = await extractMemories(message.text, { model: config.value.model });
-  // Candidates and the source are committed together. A failed write cannot leave
-  // a source marked consumed without its extracted memories.
-  return store.ingest(message, { ...analysis, ...(memoryExtraction?.warning ? { memoryWarning: memoryExtraction.warning } : {}) }, undefined, message.source === 'email' && !config.value.mail.extractMemory ? false : memoryExtraction?.memories);
-}
+const consume = message => messages.consume(message);
+
 async function syncAll() {
   if (syncing) return;
   syncing = true;

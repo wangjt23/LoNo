@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { validateEndpoint } from './analyzer.js';
+import { validateEndpoint } from './http.js';
 
 export const defaults = {
   pollMinutes: 10, launchAtLogin: false,
@@ -39,11 +39,11 @@ export class Config {
     v.bridge.hasToken = Boolean(v.bridge.token); v.bridge.token = '';
     return v;
   }
-  async save(input) {
+  async save(input, { retainBlankSecrets = true } = {}) {
     const v = schema.parse(input);
     // Blank retains an existing secret; explicit clear is a separate UI flag.
     for (const [group, field] of [['model', 'apiKey'], ['mail', 'password'], ['bridge', 'token']]) {
-      if (!v[group][field] && !input[group].clearSecret) v[group][field] = this.value[group][field];
+      if (retainBlankSecrets && !v[group][field] && !input[group].clearSecret) v[group][field] = this.value[group][field];
     }
     if (v.model.enabled) { validateEndpoint(v.model.endpoint); if (!v.model.model.trim()) throw new Error('请填写模型名称'); }
     if (v.bridge.enabled) validateEndpoint(v.bridge.endpoint);

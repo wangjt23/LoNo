@@ -27,7 +27,7 @@ try {
   let main;
   for (let i = 0; i < 150 && !main; i++) { main = app.windows().find(w => w.url().endsWith('/index.html')); if (!main) await new Promise(r => setTimeout(r, 50)); }
   await main.getByRole('heading', { name: '提醒总览' }).waitFor();
-  await main.getByText('快捷输入暂时无法加载；主界面仍可使用。再次点击快速记录会重试。', { exact: true }).waitFor({ state: 'attached' });
+  await main.locator('.runtime-notice p').filter({ hasText: '快捷输入暂时无法加载' }).waitFor({ state: 'attached' });
   assert.ok((await main.evaluate(() => window.reminder.invoke('snapshot'))).runtime.captureWarning);
   await main.locator('[data-action="capture"]').first().click();
   let capture;

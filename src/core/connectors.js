@@ -2,7 +2,7 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { validateEndpoint, readJson } from './analyzer.js';
+import { validateEndpoint, readJson } from './http.js';
 
 export function identity(value) { return createHash('sha256').update(value).digest('hex').slice(0, 24); }
 

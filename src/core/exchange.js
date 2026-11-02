@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import { z } from 'zod';
-import { validateEndpoint } from './analyzer.js';
+import { validateEndpoint } from './http.js';
 
 export const exchangeInput = z.object({
   endpoint: z.string().max(2000), user: z.string().trim().min(1).max(300),

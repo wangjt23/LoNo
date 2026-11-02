@@ -50,6 +50,11 @@ test('settings retain existing secrets, reject invalid config and fail closed wi
     safe.isAsyncEncryptionAvailable = async () => false;
     await assert.rejects(c.save(c.public()), /加密不可用/);
     const cleared = c.public(); cleared.model.clearSecret = true; await c.save(cleared); assert.equal(c.value.model.apiKey, '');
+    safe.isAsyncEncryptionAvailable = async () => true;
+    const previous = structuredClone(c.value);
+    const changed = c.public(); changed.model.apiKey = 'temporary-new-key'; await c.save(changed);
+    await c.save(previous, { retainBlankSecrets: false });
+    assert.equal(c.value.model.apiKey, '', 'internal rollback must clear a newly entered secret when the previous value was empty');
   } finally { rmSync(dir, { recursive: true }); }
 });
 test('model failure and malformed output fall back with a visible warning', async () => {

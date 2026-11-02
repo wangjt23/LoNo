@@ -3,14 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { memoryInput, memoryKey, extractLocalMemories, retrieveMemories } from './memory.js';
+import { memoryKey, extractLocalMemories, retrieveMemories } from './memory-index.js';
+import { summarySchema, taskInput, memoryInput } from './schemas.js';
 
-export const taskInput = z.object({
-  title: z.string().trim().min(1).max(160),
-  dueAt: z.string().datetime({ offset: true }).nullable(),
-  remindAt: z.string().datetime({ offset: true }).nullable(),
-  priority: z.enum(['high', 'medium', 'low']),
-}).transform(f => ({ ...f, dueAt: f.dueAt ? new Date(f.dueAt).toISOString() : null, remindAt: f.remindAt ? new Date(f.remindAt).toISOString() : null }));
+export { taskInput } from './schemas.js';
 
 export class Store {
   static async open(filename) {
@@ -76,6 +72,16 @@ export class Store {
   tasks() { return this.all(`SELECT t.*, r.source, r.sender, r.text, r.analysis FROM tasks t JOIN records r ON r.id=t.record_id ORDER BY CASE status WHEN 'review' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, COALESCE(remind_at,'9999'), created_at DESC`); }
   records(limit = 500) { return this.all(`SELECT * FROM records ORDER BY received_at DESC${limit ? ' LIMIT ?' : ''}`, limit ? [limit] : []); }
   record(id) { return this.all('SELECT * FROM records WHERE id=?', [id])[0]; }
+  setRecordSummary(id, summary) {
+    const content = summarySchema.parse(summary);
+    const metadata = z.object({ engine: z.literal('model'), model: z.string().max(200), generatedAt: z.string().datetime({ offset: true }) }).parse(summary);
+    return this.transaction(() => {
+      const record = this.record(id); if (!record) throw new Error('找不到来源记录');
+      const analysis = JSON.parse(record.analysis);
+      analysis.summary = { ...content, ...metadata };
+      this.db.run('UPDATE records SET analysis=? WHERE id=?', [JSON.stringify(analysis), id]);
+    });
+  }
   memories() { return this.all('SELECT * FROM memories ORDER BY updated_at DESC, id'); }
   recall(text) { return retrieveMemories(this.memories(), text); }
   insertMemoryCandidates(recordId, candidates) {

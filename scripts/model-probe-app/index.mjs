@@ -5,6 +5,7 @@ import initSqlJs from 'sql.js';
 import { Config } from '../../src/core/config.js';
 import { analyze } from '../../src/core/analyzer.js';
 import { extractMemories } from '../../src/core/memory.js';
+import { summarizeSource } from '../../src/core/summary.js';
 const profile = process.argv.find(a => a.startsWith('--profile='))?.slice(10);
 if (!profile) throw new Error('需要 profile；不接收密钥参数');
 app.setPath('userData', path.resolve(profile));
@@ -12,6 +13,11 @@ app.whenReady().then(async () => {
   try {
     const config = new Config(path.join(profile, 'settings.json'), safeStorage); await config.load();
     const sample = 'FW: 关于相关事项的说明\n请于2026年11月3日下午三点前提交项目验收材料，提前一小时提醒。';
+    if (process.argv.includes('--summary-only')) {
+      const summary = await summarizeSource(sample, { model: config.value.model, receivedAt: new Date().toISOString() });
+      console.log(JSON.stringify({ connected: true, summaryEngine: summary.engine, summaryPointCount: summary.keyPoints.length, syntheticInputOnly: true }));
+      app.quit(); return;
+    }
     const result = await analyze(sample, { source: 'email', model: config.value.model });
     if (result.engine !== 'model') throw new Error('模型分析未通过');
     const memory = await extractMemories('报销流程通常先整理发票，再提交部门审核。', { model: config.value.model });
