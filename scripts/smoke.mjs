@@ -18,7 +18,7 @@ async function mainPage(app) {
   }
   throw new Error('Main workspace did not load');
 }
-let bridgeCalls = 0, modelCalls = 0, modelDelay = 0, failSummary = false, failReview = false, noActionReview = false;
+let bridgeCalls = 0, modelCalls = 0, modelDelay = 0, failReview = false, noActionReview = false;
 const summaryFixture = { overview: '请提交项目材料，并核对相关要求。', keyPoints: ['行动：提交项目材料。', '时间：以原始通知为准。', '要求：核对材料清单。'] };
 const server = http.createServer((req, res) => {
   res.setHeader('Content-Type', 'application/json');
@@ -30,14 +30,11 @@ const server = http.createServer((req, res) => {
     let body = ''; req.on('data', chunk => body += chunk); req.on('end', () => {
       assert.ok(JSON.parse(body).messages[1].content.includes('提交'));
       const due = new Date(Date.now() + 86400000).toISOString();
-      if (JSON.parse(body).messages[0].content.includes('你是工作信息摘要助手')) {
-        res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(failSummary ? { invalid: true } : summaryFixture) } }] })); return;
-      }
       if (failReview) { res.end(JSON.stringify({ choices: [{ message: { content: '{"invalid":true}' } }] })); return; }
       if (noActionReview) {
-        res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ shouldRemind: false, title: '仅通知，无需处理', dueAt: null, remindAt: null, priority: 'low', confidence: .95, reason: '原文仅提供通知，没有需要本人执行的行动。' }) } }] })); return;
+        res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ shouldRemind: false, title: '仅通知，无需处理', dueAt: null, remindAt: null, priority: 'low', confidence: .95, reason: '原文仅提供通知，没有需要本人执行的行动。', summary: summaryFixture }) } }] })); return;
       }
-      setTimeout(() => res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ shouldRemind: true, title: '提交桥接测试材料', dueAt: due, remindAt: due, priority: 'high', confidence: 0.95, reason: '模拟模型识别到明确行动与截止日期。' }) } }] })), modelDelay);
+      setTimeout(() => res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ shouldRemind: true, title: '提交桥接测试材料', dueAt: due, remindAt: due, priority: 'high', confidence: 0.95, reason: '模拟模型识别到明确行动与截止日期。', summary: summaryFixture }) } }] })), modelDelay);
     });
   }
 });
@@ -143,34 +140,15 @@ try {
   assert.equal(snapshot.settings.model.apiKey, ''); assert.equal(snapshot.settings.bridge.token, '');
   assert.equal(await main.evaluate(() => typeof window.require), 'undefined');
   const summaryTask = snapshot.tasks.find(t => t.source === 'manual');
-  await main.locator(`[data-action="edit"][data-id="${summaryTask.id}"]`).first().click();
-  await main.locator('#edit-form [name="title"]').fill('临时编辑但尚未保存');
-  await main.locator('#editor [data-action="summarize-record"]').click();
-  await main.locator('#editor .summary-points li').first().waitFor();
-  assert.equal(await main.locator('#editor .summary-points li').count(), 3);
-  assert.equal(await main.locator('#edit-form [name="title"]').inputValue(), '临时编辑但尚未保存', 'summary refresh preserves unsaved edits');
-  const summarized = (await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === summaryTask.id);
-  for (const field of ['title', 'due_at', 'remind_at', 'priority', 'status', 'revision']) assert.equal(summarized[field], summaryTask[field]);
-  assert.equal(JSON.parse(summarized.analysis).summary.engine, 'model');
-  const summaryBox = await main.locator('#editor .ai-summary').boundingBox(), originalBox = await main.locator('#editor .original').boundingBox();
-  assert.ok(summaryBox.y < originalBox.y, 'AI summary appears above original information');
-  await main.screenshot({ path: path.join(artifacts, '06-ai-summary.png') });
-  failSummary = true;
-  await main.locator('#editor [data-action="summarize-record"]').click();
-  await main.locator('#toast').filter({ hasText: 'AI 摘要未生成' }).waitFor();
-  assert.equal(await main.locator('#editor .summary-points li').count(), 3, 'failed regeneration retains cached summary');
-  failSummary = false;
-  await main.locator('#editor [data-action="close"]').click();
-  const beforeReopen = modelCalls;
-  await main.locator(`[data-action="edit"][data-id="${summaryTask.id}"]`).first().click();
-  assert.equal(await main.locator('#editor .summary-points li').count(), 3);
-  assert.equal(modelCalls, beforeReopen, 'opening a cached summary does not call the model');
-  await main.locator('#editor [data-action="close"]').click();
   const beforeReview = (await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === summaryTask.id);
   await main.locator(`[data-action="edit"][data-id="${summaryTask.id}"]`).first().click();
+  assert.equal(await main.locator('#editor [data-action="summarize-record"]').count(), 0, 'only unified AI review action is available');
+  assert.equal(await main.locator('#editor .ai-summary').count(), 0, 'no empty summary card for legacy local records');
   await main.locator('#edit-form [name="title"]').fill('用户未保存的草稿');
   await main.locator('[data-action="review-task"]').click();
   await main.locator('.ai-review').waitFor();
+  assert.ok(await main.locator('.review-changed').count() > 0, 'changed fields are highlighted with before/after values');
+  assert.equal(await main.locator('.review-before').first().textContent(), '用户未保存的草稿');
   assert.equal(await main.locator('#edit-form [name="title"]').inputValue(), '用户未保存的草稿', 'AI preview does not overwrite unsaved edits');
   assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === summaryTask.id).title, beforeReview.title);
   await main.locator('[data-action="cancel-task-review"]').click();
@@ -190,6 +168,16 @@ try {
   const afterReview = (await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === summaryTask.id);
   assert.equal(afterReview.title, '审核后提交材料'); assert.equal(JSON.parse(afterReview.analysis).engine, 'model');
   assert.ok(JSON.parse(afterReview.analysis).reviewedAt);
+  assert.equal(JSON.parse(afterReview.analysis).summary.engine, 'model');
+  await main.locator(`[data-action="edit"][data-id="${summaryTask.id}"]`).first().click();
+  const beforeReopen = modelCalls;
+  assert.equal(await main.locator('#editor .summary-points li').count(), 3);
+  assert.equal(await main.locator('#editor [data-action="summarize-record"]').count(), 0);
+  assert.equal(modelCalls, beforeReopen, 'opening stored summary does not call model');
+  const summaryBox = await main.locator('#editor .ai-summary').boundingBox(), originalBox = await main.locator('#editor .original').boundingBox();
+  assert.ok(summaryBox.y < originalBox.y);
+  await main.screenshot({ path: path.join(artifacts, '06-ai-summary.png') });
+  await main.locator('#editor [data-action="close"]').click();
   noActionReview = true;
   const infoTask = snapshot.tasks.find(t => t.source === 'wecom');
   await main.locator(`[data-action="edit"][data-id="${infoTask.id}"]`).first().click();

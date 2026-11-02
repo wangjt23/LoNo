@@ -75,6 +75,7 @@ export class Store {
   task(id) { return this.all('SELECT t.*,r.source,r.sender,r.text,r.analysis,r.received_at FROM tasks t JOIN records r ON r.id=t.record_id WHERE t.id=?', [id])[0]; }
   applyTaskReview(id, revision, analysis, fields, decision) {
     const checked = analysisSchema.parse(analysis);
+    summarySchema.parse(checked.summary);
     if (analysis.engine !== 'model' || !['keep', 'complete'].includes(decision)) throw new Error('AI 整理结果无效');
     return this.transaction(() => {
       const task = this.task(id);

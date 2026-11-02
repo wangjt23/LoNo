@@ -131,6 +131,11 @@ dialog::backdrop { background: #30202b28; }
 .review-proposal > div:first-child { grid-column: 1 / -1; }
 .review-proposal dt { color: #9a7a8c; font-size: 11px; margin-bottom: 4px; }
 .review-proposal dd { color: #49323f; margin: 0; word-break: break-word; }
+.review-changed { border-left: 2px solid #d14aa4; padding-left: 9px; }
+.review-change-label { margin-left: 8px; color: #881e55; }
+.review-before { color: #907d87; text-decoration: line-through; }
+.review-change-arrow { padding: 0 8px; color: #881e55; }
+.ai-summary[hidden], .analysis-note[hidden] { display: none; }
 .review-actions { flex-wrap: wrap; align-items: center; margin-top: 14px; }
 .review-applied { font-size: 12px; color: #881e55; line-height: 1.75; background: #f4e6efb3; padding: 12px 15px; border-radius: 10px; }
 @media (forced-colors: active) { .ai-summary { background: Canvas; border-color: CanvasText; } .ai-summary-head strong, .summary-overview, .summary-points, .summary-points li::marker, .ai-summary small, .summary-empty { color: CanvasText; } }

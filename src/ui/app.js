@@ -87,7 +87,7 @@ function renderSources() {
   document.querySelectorAll('.record').forEach(el => { el.open = opened.has(el.dataset.sourceId); });
 }
 function field(label, name, value, type = 'text', hint = '') { return `<label class="field"><span>${label}</span><input type="${type}" name="${name}" value="${esc(value)}" ${type === 'password' ? 'autocomplete="new-password"' : ''}>${hint ? `<small>${esc(hint)}</small>` : ''}</label>`; }
-const aiSummaryMarkup = (id, analysis) => renderAiSummary(id, analysis, data.settings.model.enabled);
+const aiSummaryMarkup = (id, analysis) => renderAiSummary(id, analysis);
 
 const memoryKinds = { preference: '习惯偏好', person: '人物分工', workflow: '工作流程', fact: '长期事实' };
 let memoryQuery = '', memoryFilter = 'active';
@@ -171,26 +171,17 @@ document.addEventListener('click', async event => {
       catch (e) { $('#model-test-result').textContent = e.message; }
       finally { button.disabled = false; }
     }
-    if (action === 'summarize-record') {
-      const recordId = button.dataset.id, originalLabel = button.textContent; button.disabled = true; button.textContent = '正在总结…';
-      try {
-        const summary = await api.invoke('summarize-record', recordId);
-        for (const section of document.querySelectorAll('.ai-summary')) {
-          if (section.dataset.recordId === recordId) section.outerHTML = aiSummaryMarkup(recordId, { summary });
-        }
-        toast('AI 摘要已保存，提醒设置保持不变');
-      } finally { button.disabled = false; button.textContent = originalLabel; }
-    }
     if (action === 'capture') await openCapture();
     if (action === 'close') { if (isCapture) await api.invoke('hide-capture'); else $('#editor').close(); }
     if (action === 'sync') { button.disabled = true; button.textContent = '同步中…'; await api.invoke('sync'); toast('同步结束，请在信息来源查看结果'); await refresh(); }
     if (action === 'edit') openEdit(button.dataset.id);
     if (action === 'review-task') {
-      const id = editing.id, session = editingSession; button.disabled = true; button.textContent = '正在整理…';
+      const id = editing.id, session = editingSession, currentFields = getTaskFields($('#edit-form')); button.disabled = true; button.textContent = '正在整理…';
       try {
         const result = await api.invoke('review-task', id);
         if (session !== editingSession || !$('#editor').open || !$('#task-review')) return;
-        reviewResult = result; $('#task-review').innerHTML = renderTaskReview(result);
+        reviewResult = result; $('#task-review').innerHTML = renderTaskReview(result, currentFields);
+        for (const el of $('#editor').querySelectorAll('.analysis-note, .ai-summary')) el.hidden = true;
       } finally { button.disabled = false; button.textContent = 'AI 整理'; }
     }
     if (action === 'adopt-task-review') {
@@ -199,9 +190,9 @@ document.addEventListener('click', async event => {
       form.elements.namedItem('title').value = a.title; form.elements.namedItem('priority').value = a.priority;
       form.elements.namedItem('dueAt').value = inputDate(a.dueAt); form.elements.namedItem('remindAt').value = inputDate(a.remindAt);
       pendingReview = reviewResult;
-      $('#task-review').innerHTML = '<p class="review-applied">建议已填入。可继续修改，确认后点击「保存修改」；尚未写入记录。</p>';
+      $('#task-review').innerHTML = '<p class="review-applied">建议已填入，摘要将一并更新。可继续修改，确认后点击「保存修改」；尚未写入记录。</p>' + aiSummaryMarkup(editing.record_id, a);
     }
-    if (action === 'cancel-task-review') { reviewResult = null; $('#task-review').innerHTML = ''; }
+    if (action === 'cancel-task-review') { reviewResult = null; $('#task-review').innerHTML = ''; for (const el of $('#editor').querySelectorAll('.analysis-note, .ai-summary')) el.hidden = false; }
     if (action === 'dismiss-task-review') {
       if (!reviewResult || reviewResult.taskId !== editing.id) throw new Error('请重新 AI 整理');
       button.disabled = true;

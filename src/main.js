@@ -15,7 +15,6 @@ import { mailStateKey } from './core/exchange-sync.js';
 import { exchangeInput, exchangeRequestOptions } from './core/exchange.js';
 import { extractMemories } from './core/memory.js';
 import { MessageService } from './core/message-service.js';
-import { SummaryService } from './core/summary-service.js';
 import { TaskReviewService } from './core/task-review-service.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -33,7 +32,7 @@ let shortcutState = { keys: [], active: null }, shortcutWarning = '', lastShortc
 let captureBlurTimer;
 let startupPhase = 'data', captureReady = false, captureLoading = null, captureWarning = '';
 const previews = new Map();
-let messages, summaries, taskReviews;
+let messages, taskReviews;
 const notifications = new Set();
 const syncStatus = { email: { state: 'idle', message: '尚未同步' }, wecom: { state: 'idle', message: '尚未同步' } };
 
@@ -128,7 +127,6 @@ async function start() {
   try { await config.load(); } catch { startupWarning = '设置或系统密钥无法读取，本次使用离线模式；原设置文件已保留。请先备份，再重新配置。'; }
   if (quitting) return;
   messages = new MessageService(store, () => config.value);
-  summaries = new SummaryService(store, () => config.value.model);
   taskReviews = new TaskReviewService(store, () => config.value.model);
   startupPhase = 'windows';
   mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: 'LoNo · Loop Notify', show: false }));
@@ -174,7 +172,6 @@ function registerIPC() {
   handle('snapshot', snapshot);
   handle('review-task', id => taskReviews.preview(id));
   handle('apply-task-review', input => { taskReviews.apply(input); broadcast(); void checkDue(); });
-  handle('summarize-record', async id => { const summary = await summaries.generate(id); broadcast(); return summary; });
   handle('save-memory', input => { const id = store.saveMemory(input); broadcast(); return id; });
   handle('delete-memory', id => { store.deleteMemory(id); broadcast(); });
   handle('memory-source', id => {

@@ -4,7 +4,7 @@ import { Store } from '../src/core/store.js';
 import { TaskReviewService } from '../src/core/task-review-service.js';
 import { analyzeLocal } from '../src/core/analyzer.js';
 
-const proposal = { shouldRemind: true, title: '提交项目阶段报告', dueAt: '2099-11-03T15:00:00+08:00', remindAt: '2099-11-03T14:00:00+08:00', priority: 'high', confidence: .95, reason: '按原文重新识别行动和截止时间。', engine: 'model', warning: null };
+const proposal = { shouldRemind: true, title: '提交项目阶段报告', dueAt: '2099-11-03T15:00:00+08:00', remindAt: '2099-11-03T14:00:00+08:00', priority: 'high', confidence: .95, reason: '按原文重新识别行动和截止时间。', engine: 'model', warning: null, summary: { overview: '提交项目阶段报告。', keyPoints: ['明天下午三点前提交。'], engine: 'model', model: 'fixture', generatedAt: '2026-11-02T08:00:00Z' } };
 async function setup(analyzeImpl = async () => proposal) {
   const store = await Store.open();
   const source = { source: 'email', text: '项目通知\n明天下午三点前提交项目阶段报告', receivedAt: '2026-11-02T08:00:00Z' };
@@ -25,8 +25,20 @@ test('review re-reads original data at source time; preview makes no changes and
   assert.equal(store.task(id).title, proposal.title); assert.equal(store.task(id).priority, 'high');
   assert.equal(store.task(id).revision, before.revision + 1);
   assert.equal(JSON.parse(store.record(recordId).analysis).engine, 'model');
+  assert.deepEqual(JSON.parse(store.record(recordId).analysis).summary, proposal.summary);
   assert.throws(() => service.apply({ token: preview.token, fields: fields(proposal) }), /过期/);
   store.close();
+});
+
+test('incomplete AI review cannot replace dates while leaving an old summary behind', async () => {
+  for (const summary of [undefined, { overview: '缺少重点' }]) {
+    const { store, service, id } = await setup(async () => ({ ...proposal, summary }));
+    const before = store.task(id);
+    await assert.rejects(service.preview(id), /未返回完整摘要/);
+    assert.deepEqual(store.task(id), before);
+    assert.equal(service.previews.size, 0);
+    store.close();
+  }
 });
 
 test('a stale preview cannot overwrite a task edited or completed in the meantime', async () => {

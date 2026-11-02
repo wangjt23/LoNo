@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { analyze } from './analyzer.js';
+import { summarySchema } from './schemas.js';
 
 export class TaskReviewService {
   constructor(store, getModel, { analyzeImpl = analyze, now = () => Date.now() } = {}) {
@@ -15,6 +16,7 @@ export class TaskReviewService {
     const job = this.analyze(task.text, { now: new Date(task.received_at), source: task.source, sender: task.sender, model, memories: this.store.recall(task.text) })
       .then(analysis => {
         if (analysis.engine !== 'model') throw new Error('AI 整理失败，原提醒未修改；请检查模型连接后重试');
+        if (!summarySchema.safeParse(analysis.summary).success) throw new Error('AI 整理失败：未返回完整摘要，原提醒未修改，请重试');
         for (const [key, value] of this.previews) if (value.expires <= this.now()) this.previews.delete(key);
         if (this.previews.size >= 100) this.previews.delete(this.previews.keys().next().value);
         const token = randomUUID();
