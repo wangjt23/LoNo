@@ -80,6 +80,7 @@ try {
     assert.equal(mac.name, 'LoNo');
     assert.ok(mac.roles.includes('quit'), 'Mac app menu supports Command+Q');
     assert.ok(mac.roles.includes('paste'), 'Mac app menu preserves native editing shortcuts');
+    await main.waitForFunction(async () => (await window.reminder.invoke('snapshot')).runtime.shortcuts.length === 2);
     const keys = (await main.evaluate(() => window.reminder.invoke('snapshot'))).runtime.shortcuts;
     assert.deepEqual(keys.map(key => key.label), ['Command+Shift+Space', 'Command+Option+Space']);
     if (keys.some(key => key.registered)) assert.match(await main.locator('.new-button kbd').textContent(), /⌘/);
