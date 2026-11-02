@@ -1,4 +1,4 @@
-# LoNo 0.3.5
+# LoNo 0.3.6
 
 - GitHub Actions 构建并测试 Windows x64、macOS Apple Silicon 和 Intel 版本，全部成功后自动发布。
 - Windows 提供安装版 EXE 和免安装 ZIP；Mac 提供对应架构 DMG，拖入 Applications 后运行。
