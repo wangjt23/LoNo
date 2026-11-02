@@ -8,7 +8,11 @@
 
 ### 自动构建与发布
 
-当前预发布版为0.3.7，Windows x64安装版/免安装ZIP及Mac arm64/x64 DMG已由 [GitHub Actions](https://github.com/wangjt23/LoNo/actions/workflows/release.yml) 构建、测试并发布。main提交和PR运行核心测试；推送与package.json版本一致的v版本号标签执行三平台构建，全部通过后发布。手动运行只保存构建产物。详见 [macOS说明](../MACOS.md) 与 [验证记录](../VALIDATION.md)。
+当前预发布版为0.3.9，Windows x64安装版/免安装ZIP及Mac arm64/x64 DMG已由 [GitHub Actions](https://github.com/wangjt23/LoNo/actions/workflows/release.yml) 构建、测试并发布。main提交和PR运行核心测试；推送与package.json版本一致的v版本号标签执行三平台构建，全部通过后发布。手动运行只保存构建产物。详见 [macOS说明](../MACOS.md) 与 [验证记录](../VALIDATION.md)。
+
+### 多邮箱配置（0.3.9）
+
+配置以mailAccounts数组保存多个邮箱，各条目使用稳定id关联加密凭据，支持Exchange或IMAP及独立别名。旧单邮箱配置兼容迁移为legacy-mail/mail1并沿用原同步游标；旧客户端mail字段保留首邮箱兼容视图。凭据按邮箱id加密保存，不返回前端；圆点为占位符。清除操作独立持久化，不提交其他未保存的表单更改。来源记录保存account_id/account_alias，单个邮箱的认证暂停不阻塞其他邮箱。数据库迁移前在原数据目录创建before-multi-mail.bak备份。
 
 ### 产品截图
 
