@@ -4,7 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { memoryKey, extractLocalMemories, retrieveMemories } from './memory-index.js';
-import { summarySchema, taskInput, memoryInput } from './schemas.js';
+import { summarySchema, taskInput, memoryInput, analysisSchema } from './schemas.js';
 
 export { taskInput } from './schemas.js';
 
@@ -72,6 +72,29 @@ export class Store {
   tasks() { return this.all(`SELECT t.*, r.source, r.sender, r.text, r.analysis FROM tasks t JOIN records r ON r.id=t.record_id ORDER BY CASE status WHEN 'review' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, COALESCE(remind_at,'9999'), created_at DESC`); }
   records(limit = 500) { return this.all(`SELECT * FROM records ORDER BY received_at DESC${limit ? ' LIMIT ?' : ''}`, limit ? [limit] : []); }
   record(id) { return this.all('SELECT * FROM records WHERE id=?', [id])[0]; }
+  task(id) { return this.all('SELECT t.*,r.source,r.sender,r.text,r.analysis,r.received_at FROM tasks t JOIN records r ON r.id=t.record_id WHERE t.id=?', [id])[0]; }
+  applyTaskReview(id, revision, analysis, fields, decision) {
+    const checked = analysisSchema.parse(analysis);
+    if (analysis.engine !== 'model' || !['keep', 'complete'].includes(decision)) throw new Error('AI 整理结果无效');
+    return this.transaction(() => {
+      const task = this.task(id);
+      if (!task || task.revision !== revision) throw new Error('提醒已被修改，请重新 AI 整理后再保存');
+      const now = new Date().toISOString();
+      if (decision === 'complete') {
+        if (checked.shouldRemind) throw new Error('AI 没有判定无需处理');
+        this.db.run("UPDATE tasks SET status='done',completed_at=COALESCE(completed_at,?),revision=revision+1 WHERE id=?", [now, id]);
+      } else {
+        const f = taskInput.parse(fields);
+        const unchanged = f.remindAt === task.remind_at && f.dueAt === task.due_at;
+        if (!unchanged && f.remindAt && f.dueAt && Date.parse(f.remindAt) > Date.parse(f.dueAt)) throw new Error('提醒时间不能晚于截止时间');
+        const scheduled = f.remindAt && (!f.dueAt || Date.parse(f.dueAt) > Date.now() || Date.parse(f.remindAt) > Date.now());
+        this.db.run("UPDATE tasks SET title=?,due_at=?,remind_at=?,priority=?,status=CASE WHEN status='done' THEN 'done' ELSE ? END,notified_at=CASE WHEN status='done' THEN notified_at ELSE NULL END,revision=revision+1 WHERE id=?", [f.title, f.dueAt, f.remindAt, f.priority, scheduled ? 'pending' : 'review', id]);
+      }
+      const previous = JSON.parse(task.analysis);
+      const merged = { ...previous, ...analysis, ...checked, summary: checked.summary ? analysis.summary : previous.summary, reviewedAt: now, reviewDecision: decision === 'complete' ? 'no-action-confirmed' : 'kept-by-user' };
+      this.db.run('UPDATE records SET analysis=? WHERE id=?', [JSON.stringify(merged), task.record_id]);
+    });
+  }
   setRecordSummary(id, summary) {
     const content = summarySchema.parse(summary);
     const metadata = z.object({ engine: z.literal('model'), model: z.string().max(200), generatedAt: z.string().datetime({ offset: true }) }).parse(summary);

@@ -18,7 +18,7 @@ async function mainPage(app) {
   }
   throw new Error('Main workspace did not load');
 }
-let bridgeCalls = 0, modelCalls = 0, modelDelay = 0, failSummary = false;
+let bridgeCalls = 0, modelCalls = 0, modelDelay = 0, failSummary = false, failReview = false, noActionReview = false;
 const summaryFixture = { overview: '请提交项目材料，并核对相关要求。', keyPoints: ['行动：提交项目材料。', '时间：以原始通知为准。', '要求：核对材料清单。'] };
 const server = http.createServer((req, res) => {
   res.setHeader('Content-Type', 'application/json');
@@ -32,6 +32,10 @@ const server = http.createServer((req, res) => {
       const due = new Date(Date.now() + 86400000).toISOString();
       if (JSON.parse(body).messages[0].content.includes('你是工作信息摘要助手')) {
         res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(failSummary ? { invalid: true } : summaryFixture) } }] })); return;
+      }
+      if (failReview) { res.end(JSON.stringify({ choices: [{ message: { content: '{"invalid":true}' } }] })); return; }
+      if (noActionReview) {
+        res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ shouldRemind: false, title: '仅通知，无需处理', dueAt: null, remindAt: null, priority: 'low', confidence: .95, reason: '原文仅提供通知，没有需要本人执行的行动。' }) } }] })); return;
       }
       setTimeout(() => res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ shouldRemind: true, title: '提交桥接测试材料', dueAt: due, remindAt: due, priority: 'high', confidence: 0.95, reason: '模拟模型识别到明确行动与截止日期。' }) } }] })), modelDelay);
     });
@@ -162,6 +166,41 @@ try {
   assert.equal(await main.locator('#editor .summary-points li').count(), 3);
   assert.equal(modelCalls, beforeReopen, 'opening a cached summary does not call the model');
   await main.locator('#editor [data-action="close"]').click();
+  const beforeReview = (await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === summaryTask.id);
+  await main.locator(`[data-action="edit"][data-id="${summaryTask.id}"]`).first().click();
+  await main.locator('#edit-form [name="title"]').fill('用户未保存的草稿');
+  await main.locator('[data-action="review-task"]').click();
+  await main.locator('.ai-review').waitFor();
+  assert.equal(await main.locator('#edit-form [name="title"]').inputValue(), '用户未保存的草稿', 'AI preview does not overwrite unsaved edits');
+  assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === summaryTask.id).title, beforeReview.title);
+  await main.locator('[data-action="cancel-task-review"]').click();
+  failReview = true;
+  await main.locator('[data-action="review-task"]').click();
+  await main.locator('#toast').filter({ hasText: 'AI 整理失败' }).waitFor();
+  assert.equal(await main.locator('#edit-form [name="title"]').inputValue(), '用户未保存的草稿');
+  failReview = false;
+  await main.locator('[data-action="review-task"]').click();
+  await main.locator('[data-action="adopt-task-review"]').waitFor();
+  await main.screenshot({ path: path.join(artifacts, '07-ai-review.png') });
+  await main.locator('[data-action="adopt-task-review"]').click();
+  assert.equal(await main.locator('#edit-form [name="title"]').inputValue(), '提交桥接测试材料');
+  await main.locator('#edit-form [name="title"]').fill('审核后提交材料');
+  await main.locator('#edit-form [type="submit"]').click();
+  await main.getByText('提醒已更新', { exact: true }).waitFor();
+  const afterReview = (await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === summaryTask.id);
+  assert.equal(afterReview.title, '审核后提交材料'); assert.equal(JSON.parse(afterReview.analysis).engine, 'model');
+  assert.ok(JSON.parse(afterReview.analysis).reviewedAt);
+  noActionReview = true;
+  const infoTask = snapshot.tasks.find(t => t.source === 'wecom');
+  await main.locator(`[data-action="edit"][data-id="${infoTask.id}"]`).first().click();
+  await main.locator('[data-action="review-task"]').click();
+  await main.locator('[data-action="dismiss-task-review"]').waitFor();
+  assert.notEqual((await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === infoTask.id).status, 'done');
+  await main.locator('[data-action="dismiss-task-review"]').click();
+  await main.getByText('已确认无需处理，原始信息继续保留', { exact: true }).waitFor();
+  assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === infoTask.id).status, 'done');
+  noActionReview = false;
+  await main.evaluate(id => window.reminder.invoke('update-task', { id, action: 'restore' }), infoTask.id);
   // Export using the actual dialog path while replacing only OS file picking.
   const exportFile = path.join(dir, 'export.json');
   await app.evaluate(({ dialog }, filename) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename }); }, exportFile);
@@ -247,11 +286,23 @@ try {
   });
   await memoryRestarted.locator('[data-view="today"]').click();
   assert.equal(await memoryRestarted.getByText('过期测试材料', { exact: true }).count(), 0);
+  await memoryRestarted.locator('[data-view="review"]').click();
+  assert.equal(await memoryRestarted.getByText('过期测试材料', { exact: true }).count(), 0, 'dated review-status records are not in the undated confirmation view');
+  assert.equal(await memoryRestarted.locator('#count-review').textContent(), '');
   await memoryRestarted.locator('[data-view="overdue"]').click();
   await memoryRestarted.getByText('过期测试材料', { exact: true }).waitFor();
   assert.equal(await memoryRestarted.locator('.task-row').count(), 1);
   await memoryRestarted.locator('[data-action="complete"]').click();
   await memoryRestarted.getByText('没有过期的未完成事项', { exact: true }).waitFor();
+  await memoryRestarted.evaluate(async () => {
+    const analysis = await window.reminder.invoke('analyze', '提交无日期测试材料');
+    await window.reminder.invoke('save-capture', { token: analysis.token, fields: { title: '无日期测试材料', dueAt: null, remindAt: null, priority: 'medium' } });
+  });
+  await memoryRestarted.locator('[data-view="review"]').click();
+  await memoryRestarted.getByText('无日期测试材料', { exact: true }).waitFor();
+  assert.equal(await memoryRestarted.locator('#count-review').textContent(), '1');
+  await memoryRestarted.locator('[data-view="overdue"]').click();
+  assert.equal(await memoryRestarted.getByText('无日期测试材料', { exact: true }).count(), 0);
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, Escape draft retention, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication, memory review/source/recall/edit/search/add/delete/restart', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
 } finally { if (app) await app.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

@@ -1,12 +1,14 @@
+import { renderTaskReview } from './components/task-review.js';
 import { esc, dateText } from './format.js';
 import { renderAiSummary } from './components/ai-summary.js';
-import { isToday, isOverdue } from './task-views.js';
+import { isToday, isOverdue, isReview } from './task-views.js';
 import { readableSource } from '../core/source-text.js';
 import { createRefreshQueue } from './refresh-queue.js';
 const api = window.reminder;
 const $ = selector => document.querySelector(selector);
 const labels = { manual: '快捷记录', email: '邮件', wecom: '企业微信', high: '重要', medium: '普通', low: '低优先级', pending: '进行中', review: '待确认', done: '已完成' };
 const isCapture = new URLSearchParams(location.search).has('capture');
+let reviewResult = null, pendingReview = null, editingSession = 0;
 let data, view = 'all', query = '', preview = null, editing = null, busy = false, captureRevision = 0;
 const refresh = createRefreshQueue(refreshOnce);
 const icons = {
@@ -28,7 +30,7 @@ function toast(text, error = false) { $('#toast').textContent = text; $('#toast'
 const overdue = task => isOverdue(task);
 const today = task => isToday(task);
 function modelNotice() { return data?.settings.model.enabled ? '已启用模型 · 内容将发送到配置的模型服务' : '离线分析 · 输入内容不会发送到模型服务'; }
-const titles = { all: ['提醒总览', '让每一件重要的事，都有着落。'], today: ['今日安排', '专注今天，也照顾那些尚未完成的事。'], overdue: ['已过期', '超过截止时间的未完成事项，单独留在这里跟进。'], review: ['待确认', '补充时间或核对分析，让提醒更准确。'], done: ['已完成', '每一次完成，都值得被记住。'], sources: ['信息来源', '把分散的信息，汇聚到同一个地方。'], memories: ['工作记忆', '把常用经验留下，让下一次更从容。'], settings: ['偏好设置', '按你的工作方式，连接信息与智能。'] };
+const titles = { all: ['提醒总览', '让每一件重要的事，都有着落。'], today: ['今日安排', '专注今天，也照顾那些尚未完成的事。'], overdue: ['已过期', '超过截止时间（未设截止时按提醒时间）的未完成事项。'], review: ['待确认', '尚无明确时间的事项，补充时间后即可安排提醒。'], done: ['已完成', '每一次完成，都值得被记住。'], sources: ['信息来源', '把分散的信息，汇聚到同一个地方。'], memories: ['工作记忆', '把常用经验留下，让下一次更从容。'], settings: ['偏好设置', '按你的工作方式，连接信息与智能。'] };
 
 async function refreshOnce() {
   data = await api.invoke('snapshot');
@@ -47,7 +49,7 @@ function shell() {
 }
 function updateNav() {
   const active = data.tasks.filter(t => t.status !== 'done');
-  for (const [key, count] of Object.entries({ all: active.length, today: active.filter(today).length, overdue: active.filter(overdue).length, review: active.filter(t => t.status === 'review').length, done: data.tasks.length - active.length })) $(`#count-${key}`).textContent = count || '';
+  for (const [key, count] of Object.entries({ all: active.length, today: active.filter(today).length, overdue: active.filter(overdue).length, review: active.filter(isReview).length, done: data.tasks.length - active.length })) $(`#count-${key}`).textContent = count || '';
   document.querySelectorAll('[data-view]').forEach(el => el.classList.toggle('active', el.dataset.view === view));
   $('#crumb').textContent = titles[view][0];
 }
@@ -63,7 +65,7 @@ function renderView() {
 function renderTasks() {
   const active = data.tasks.filter(t => t.status !== 'done');
   const dueToday = active.filter(t => today(t)).length;
-  $('#view-content').innerHTML = `${view === 'all' ? `<div class="stats"><article><div class="stat-icon blue">${icon('inbox')}</div><div><span>待办事项</span><strong>${active.length}<small>件</small></strong></div><div class="stat-note">每一件事，都井井有条</div></article><article><div class="stat-icon amber">${icon('sun')}</div><div><span>今日提醒</span><strong>${dueToday}<small>件</small></strong></div><div class="stat-note">${active.filter(overdue).length} 件已过截止时间</div></article><article><div class="stat-icon violet">${icon('clock')}</div><div><span>需要确认</span><strong>${active.filter(t => t.status === 'review').length}<small>件</small></strong></div><div class="stat-note">核对日期，让提醒更安心</div></article></div>` : ''}<section class="task-panel"><div class="panel-header"><h2>${view === 'done' ? '完成记录' : view === 'overdue' ? '过期事项' : '我的提醒'} <span id="list-count"></span></h2><label class="search">${icon('search')}<input id="search" placeholder="搜索事项、原文或联系人" value="${esc(query)}" aria-label="搜索事项"></label></div><div id="task-list"></div></section><div class="bottom-note">${icon('check')} 原始信息与分析依据均保存在本地，可随时回溯。</div>`;
+  $('#view-content').innerHTML = `${view === 'all' ? `<div class="stats"><article><div class="stat-icon blue">${icon('inbox')}</div><div><span>待办事项</span><strong>${active.length}<small>件</small></strong></div><div class="stat-note">每一件事，都井井有条</div></article><article><div class="stat-icon amber">${icon('sun')}</div><div><span>今日提醒</span><strong>${dueToday}<small>件</small></strong></div><div class="stat-note">${active.filter(overdue).length} 件已过截止时间</div></article><article><div class="stat-icon violet">${icon('clock')}</div><div><span>需要确认</span><strong>${active.filter(isReview).length}<small>件</small></strong></div><div class="stat-note">核对日期，让提醒更安心</div></article></div>` : ''}<section class="task-panel"><div class="panel-header"><h2>${view === 'done' ? '完成记录' : view === 'overdue' ? '过期事项' : '我的提醒'} <span id="list-count"></span></h2><label class="search">${icon('search')}<input id="search" placeholder="搜索事项、原文或联系人" value="${esc(query)}" aria-label="搜索事项"></label></div><div id="task-list"></div></section><div class="bottom-note">${icon('check')} 原始信息与分析依据均保存在本地，可随时回溯。</div>`;
   renderTaskList();
 }
 function analysisBadge(task) { const a = JSON.parse(task.analysis); return a.engine === 'model' ? '<span class="engine-badge">AI 分析</span>' : '<span class="engine-badge local">' + (a.warning ? '本地规则 · AI 调用失败' : '本地规则') + '</span>'; }
@@ -72,11 +74,11 @@ function renderTaskList() {
     if (view === 'done' ? t.status !== 'done' : t.status === 'done') return false;
     if (view === 'today' && !today(t)) return false;
     if (view === 'overdue' && !overdue(t)) return false;
-    if (view === 'review' && t.status !== 'review') return false;
+    if (view === 'review' && !isReview(t)) return false;
     return !query || `${t.title} ${t.text} ${t.sender}`.toLowerCase().includes(query.toLowerCase());
   });
   $('#list-count').textContent = `${tasks.length} 项`;
-  $('#task-list').innerHTML = tasks.length ? tasks.map(t => `<article class="task-row ${t.status === 'done' ? 'completed' : ''}"><button class="task-check ${t.status === 'done' ? 'checked' : ''}" data-action="${t.status === 'done' ? 'restore' : 'complete'}" data-id="${t.id}" title="${t.status === 'done' ? '恢复事项' : '标记完成'}" aria-label="${t.status === 'done' ? '恢复' : '完成'} ${esc(t.title)}">${t.status === 'done' ? '✓' : ''}</button><div class="task-body"><button class="task-title" data-action="edit" data-id="${t.id}">${esc(t.title)}</button><div class="task-meta"><span class="source-label ${t.source}">${esc(labels[t.source] || t.source)}</span>${analysisBadge(t)}${t.sender ? `<span>${esc(t.sender.slice(0, 40))}</span>` : ''}<span class="${overdue(t) ? 'overdue' : ''}">${icon('clock')}${esc(dateText(t.remind_at))}${overdue(t) ? ' · 已逾期' : ''}</span>${t.status === 'review' ? '<span class="review-badge">请确认时间</span>' : ''}${t.notified_at ? '<span>已通知</span>' : ''}</div></div><span class="priority ${t.priority}"><i></i>${labels[t.priority]}</span><button class="row-more" data-action="edit" data-id="${t.id}" aria-label="查看详情">${icon('arrow')}</button></article>`).join('') : `<div class="empty"><div class="empty-art">${icon(view === 'done' ? 'check' : 'inbox')}</div><h3>${query ? '没有找到匹配的事项' : view === 'review' ? '暂时没有需要确认的事项' : view === 'done' ? '从完成第一件小事开始' : view === 'overdue' ? '没有过期的未完成事项' : view === 'today' ? '今天的安排，尽在掌握' : '把第一件事，交给LoNo'}</h3><p>${query ? '试试搜索原文中的词语或联系人。' : '随手记下一句话，让提醒替你记住。'}</p><button class="primary" data-action="capture">${icon('plus')} 记录一件事</button><small>试试：明天下午三点提醒我提交项目材料</small></div>`;
+  $('#task-list').innerHTML = tasks.length ? tasks.map(t => `<article class="task-row ${t.status === 'done' ? 'completed' : ''}"><button class="task-check ${t.status === 'done' ? 'checked' : ''}" data-action="${t.status === 'done' ? 'restore' : 'complete'}" data-id="${t.id}" title="${t.status === 'done' ? '恢复事项' : '标记完成'}" aria-label="${t.status === 'done' ? '恢复' : '完成'} ${esc(t.title)}">${t.status === 'done' ? '✓' : ''}</button><div class="task-body"><button class="task-title" data-action="edit" data-id="${t.id}">${esc(t.title)}</button><div class="task-meta"><span class="source-label ${t.source}">${esc(labels[t.source] || t.source)}</span>${analysisBadge(t)}${t.sender ? `<span>${esc(t.sender.slice(0, 40))}</span>` : ''}<span class="${overdue(t) ? 'overdue' : ''}">${icon('clock')}${esc(dateText(t.remind_at))}${overdue(t) ? ' · 已逾期' : ''}</span>${isReview(t) ? '<span class="review-badge">请确认时间</span>' : ''}${t.notified_at ? '<span>已通知</span>' : ''}</div></div><span class="priority ${t.priority}"><i></i>${labels[t.priority]}</span><button class="row-more" data-action="edit" data-id="${t.id}" aria-label="查看详情">${icon('arrow')}</button></article>`).join('') : `<div class="empty"><div class="empty-art">${icon(view === 'done' ? 'check' : 'inbox')}</div><h3>${query ? '没有找到匹配的事项' : view === 'review' ? '暂时没有需要确认的事项' : view === 'done' ? '从完成第一件小事开始' : view === 'overdue' ? '没有过期的未完成事项' : view === 'today' ? '今天的安排，尽在掌握' : '把第一件事，交给LoNo'}</h3><p>${query ? '试试搜索原文中的词语或联系人。' : '随手记下一句话，让提醒替你记住。'}</p><button class="primary" data-action="capture">${icon('plus')} 记录一件事</button><small>试试：明天下午三点提醒我提交项目材料</small></div>`;
 }
 function renderSources() {
   const opened = new Set([...document.querySelectorAll('.record[open]')].map(el => el.dataset.sourceId));
@@ -129,10 +131,11 @@ async function openCapture() {
   if (!isCapture) { await api.invoke('capture'); return; }
 }
 function openEdit(id) {
+  editingSession++; reviewResult = null; pendingReview = null;
   editing = data.tasks.find(t => t.id === id);
   if (!editing) return;
   const a = JSON.parse(editing.analysis);
-  $('#editor').innerHTML = `<form id="edit-form"><div class="dialog-header"><h2>提醒详情</h2><button type="button" class="close-button" data-action="close">×</button></div>${fieldsMarkup({ title: editing.title, dueAt: editing.due_at, remindAt: editing.remind_at, priority: editing.priority })}<div class="analysis-note"><strong>${a.engine === 'model' ? '模型分析' : '本地分析'}</strong><p>${esc(a.reason)}</p>${memoryContextMarkup(a)}${a.warning ? `<p class="warning">${esc(a.warning)}</p>` : ''}</div>${aiSummaryMarkup(editing.record_id, a)}<details class="original" open><summary>原始信息 · ${labels[editing.source]} ${esc(editing.sender)}</summary><p class="raw-text">${esc(readableSource(editing.text))}</p></details><div class="button-row end">${editing.status !== 'done' ? '<button type="button" class="secondary" data-action="snooze-current">15 分钟后再提醒</button>' : ''}<button class="primary" type="submit">保存修改</button></div></form>`;
+  $('#editor').innerHTML = `<form id="edit-form"><div class="dialog-header"><h2>提醒详情</h2><button type="button" class="secondary review-button" data-action="review-task" ${data.settings.model.enabled ? '' : 'disabled'} title="根据原文重新判断，不沿用旧分析">AI 整理</button><button type="button" class="close-button" data-action="close">×</button></div>${fieldsMarkup({ title: editing.title, dueAt: editing.due_at, remindAt: editing.remind_at, priority: editing.priority })}<div id="task-review" aria-live="polite"></div><div class="analysis-note"><strong>${a.engine === 'model' ? '模型分析' : '本地分析'}</strong><p>${esc(a.reason)}</p>${memoryContextMarkup(a)}${a.warning ? `<p class="warning">${esc(a.warning)}</p>` : ''}</div>${aiSummaryMarkup(editing.record_id, a)}<details class="original" open><summary>原始信息 · ${labels[editing.source]} ${esc(editing.sender)}</summary><p class="raw-text">${esc(readableSource(editing.text))}</p></details><div class="button-row end">${editing.status !== 'done' ? '<button type="button" class="secondary" data-action="snooze-current">15 分钟后再提醒</button>' : ''}<button class="primary" type="submit">保存修改</button></div></form>`;
   $('#editor').showModal();
 }
 function getTaskFields(form) { const f = new FormData(form); return { title: f.get('title'), priority: f.get('priority'), dueAt: iso(f.get('dueAt')), remindAt: iso(f.get('remindAt')) }; }
@@ -182,6 +185,29 @@ document.addEventListener('click', async event => {
     if (action === 'close') { if (isCapture) await api.invoke('hide-capture'); else $('#editor').close(); }
     if (action === 'sync') { button.disabled = true; button.textContent = '同步中…'; await api.invoke('sync'); toast('同步结束，请在信息来源查看结果'); await refresh(); }
     if (action === 'edit') openEdit(button.dataset.id);
+    if (action === 'review-task') {
+      const id = editing.id, session = editingSession; button.disabled = true; button.textContent = '正在整理…';
+      try {
+        const result = await api.invoke('review-task', id);
+        if (session !== editingSession || !$('#editor').open || !$('#task-review')) return;
+        reviewResult = result; $('#task-review').innerHTML = renderTaskReview(result);
+      } finally { button.disabled = false; button.textContent = 'AI 整理'; }
+    }
+    if (action === 'adopt-task-review') {
+      if (!reviewResult || reviewResult.taskId !== editing.id) throw new Error('请重新 AI 整理');
+      const a = reviewResult.analysis, form = $('#edit-form');
+      form.elements.namedItem('title').value = a.title; form.elements.namedItem('priority').value = a.priority;
+      form.elements.namedItem('dueAt').value = inputDate(a.dueAt); form.elements.namedItem('remindAt').value = inputDate(a.remindAt);
+      pendingReview = reviewResult;
+      $('#task-review').innerHTML = '<p class="review-applied">建议已填入。可继续修改，确认后点击「保存修改」；尚未写入记录。</p>';
+    }
+    if (action === 'cancel-task-review') { reviewResult = null; $('#task-review').innerHTML = ''; }
+    if (action === 'dismiss-task-review') {
+      if (!reviewResult || reviewResult.taskId !== editing.id) throw new Error('请重新 AI 整理');
+      button.disabled = true;
+      try { await api.invoke('apply-task-review', { token: reviewResult.token, decision: 'complete' }); $('#editor').close(); toast('已确认无需处理，原始信息继续保留'); }
+      finally { button.disabled = false; }
+    }
     if (['complete', 'restore'].includes(action)) { await api.invoke('update-task', { id: button.dataset.id, action }); toast(action === 'complete' ? '又完成了一件事' : '事项已恢复'); }
     if (action === 'snooze-current') { await api.invoke('update-task', { id: editing.id, action: 'snooze' }); $('#editor').close(); toast('将在 15 分钟后再次提醒'); }
     if (action === 'analyze') {
@@ -247,7 +273,11 @@ document.addEventListener('submit', async event => {
       preview = null; $('#app').innerHTML = captureMarkup(); document.body.classList.remove('has-preview');
       await api.invoke('capture-layout', 'input'); await api.invoke('hide-capture');
     }
-    if (form.id === 'edit-form') { await api.invoke('update-task', { id: editing.id, action: 'edit', fields: getTaskFields(form) }); $('#editor').close(); toast('提醒已更新'); }
+    if (form.id === 'edit-form') {
+      if (pendingReview?.taskId === editing.id) await api.invoke('apply-task-review', { token: pendingReview.token, fields: getTaskFields(form), decision: 'keep' });
+      else await api.invoke('update-task', { id: editing.id, action: 'edit', fields: getTaskFields(form) });
+      $('#editor').close(); toast('提醒已更新');
+    }
     if (form.id === 'settings-form') {
       const input = structuredClone(data.settings); const values = new FormData(form);
       for (const el of form.elements) {
