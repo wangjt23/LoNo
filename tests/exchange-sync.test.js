@@ -78,3 +78,15 @@ test('enabled Exchange rejects non-HTTPS endpoints and missing passwords', async
   v.mail.endpoint = mail.endpoint; v.mail.password = '';
   await assert.rejects(c.save(v), /密码/);
 });
+
+
+test('EWS bootstrap includes days eight to fourteen, excludes older mail and preserves a persisted cutoff', async()=>{
+  const date=days=>new Date(+now-days*86400000).toISOString();
+  const messages=[];let reads=0;
+  const transport=async op=>op==='SyncFolderItems'?page(change('day10',date(10))+change('day14',date(14))+change('day15',date(15))):(reads++,item());
+  const result=await pollExchange(mail,{},async m=>messages.push(m),transport,{now});
+  assert.equal(result.cutoff,date(14));assert.equal(result.count,2);assert.equal(result.skipped,1);assert.equal(reads,2);
+  const existing=await pollExchange(mail,{cutoff:date(7),bootstrap:true},async()=>{},transport,{now});
+  assert.equal(existing.cutoff,date(7));assert.equal(existing.count,0);assert.equal(reads,2);
+  assert.ok(syncRequest().includes('<m:MaxChangesReturned>50</m:MaxChangesReturned>'));
+});

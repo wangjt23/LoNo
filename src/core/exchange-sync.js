@@ -34,7 +34,7 @@ export function itemRequest(id) {
 // One bounded page per poll. Persist returned state only after every consumed item
 // is durable; a failed page replays safely through the store's external-key dedup.
 export async function pollExchange(mail, state = {}, consume, transport, { now = new Date(), hasRecord = () => false } = {}) {
-  const cutoff = state.cutoff || new Date(+now - 7 * 86400000).toISOString();
+  const cutoff = state.cutoff || new Date(+now - 14 * 86400000).toISOString();
   const bootstrap = state.bootstrap !== false;
   const [page] = parseEwsResponse(await transport('SyncFolderItems', syncRequest(state.cursor)), 'SyncFolderItems');
   if (typeof page.SyncState !== 'string' || !page.SyncState || page.SyncState.length > 100000 || !['true', 'false'].includes(page.IncludesLastItemInRange)) throw failure('XML', 'Exchange 同步游标不完整');

@@ -36,7 +36,7 @@ export async function pollMail(config, state = {}, consume, Client = ImapFlow) {
     const validity = String(mailbox.uidValidity);
     const same = state.validity === validity;
     phase='search';
-    const uids = await client.search(same ? { uid: `${(state.uid || 0) + 1}:*` } : { since: new Date(Date.now() - 7 * 86400000) }, { uid: true });
+    const uids = await client.search(same ? { uid: `${(state.uid || 0) + 1}:*` } : { since: new Date(Date.now() - 14 * 86400000) }, { uid: true });
     const ids = (uids || []).filter(uid => !same || uid > (state.uid || 0)).sort((a, b) => a - b);
     // First run caps the historical import, later runs drain incrementally.
     const batch = same ? ids.slice(0, 50) : ids.slice(-50);

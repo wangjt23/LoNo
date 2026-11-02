@@ -106,3 +106,18 @@ test('empty first IMAP poll records a UID boundary so later backlog is not trunc
   assert.equal(items.length, 50); assert.equal(second.uid, 150); assert.equal(second.remaining, 10);
   assert.ok(items[0].text.includes('task 101'));
 });
+
+
+test('IMAP bootstrap searches fourteen days and fetches only the newest fifty; next poll is incremental', async()=>{
+  let searchCount=0,fetchCount=0;
+  class Client {
+    on(){} async connect(){} async logout(){}
+    async mailboxOpen(){return {uidValidity:42n,uidNext:61};}
+    async search(query){if(++searchCount===1){const age=Date.now()-query.since.getTime();assert.ok(age>=14*86400000&&age<14*86400000+2000);return Array.from({length:60},(_,i)=>i+1);}assert.equal(query.uid,'61:*');return [60];}
+    async fetchOne(uid){fetchCount++;return {source:Buffer.from('Subject: task '+uid+'\r\n\r\nPlease submit'),internalDate:new Date()};}
+  }
+  const mail={host:'example.test',port:993,user:'fixture',password:'fixture'},ids=[];
+  const state=await pollMail(mail,{},async m=>ids.push(m.key),Client);
+  assert.equal(state.count,50);assert.equal(fetchCount,50);assert.equal(state.uid,60);assert.ok(ids[0].endsWith(':11'));
+  const next=await pollMail(mail,state,async()=>assert.fail('no new mail'),Client);assert.equal(next.count,0);assert.equal(fetchCount,50);
+});

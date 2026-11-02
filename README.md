@@ -96,12 +96,12 @@ Loop Notify · 你的桌面智能提醒助手
 
 | 平台 | 安装方式 | 当前状态 |
 | :--- | :--- | :--- |
-| Windows · x64 | 下载 ZIP 后解压并运行 `LoNo.exe`，或使用 Setup 安装包。 | 预发布版，具体文件以 Releases 为准。 |
+| Windows · x64 | 下载 ZIP 后解压并运行 `LoNo.exe`，或使用 Setup 安装包。 | 正式版，具体文件以 Releases 为准。 |
 | macOS · Apple Silicon / Intel | DMG 拖拽安装。 | Apple Silicon 与 Intel DMG 均已发布，具体文件以 Releases 为准。 |
 
 使用 ZIP 版本时请保留完整文件夹。更新前，从托盘或应用菜单退出旧版，再启动新版。
 
-当前测试包尚未完成可信发布签名，系统可能提示或阻止打开。安装与签名说明见 [Windows 安装说明](WINDOWS-SIGNING.md) 和 [macOS 构建说明](MACOS.md)。
+当前发布包尚未完成可信发布签名，系统可能提示或阻止打开。安装与签名说明见 [Windows 安装说明](WINDOWS-SIGNING.md) 和 [macOS 构建说明](MACOS.md)。
 
 ## 你的记录，由你掌握
 

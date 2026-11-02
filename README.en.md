@@ -98,7 +98,7 @@ Visit **[GitHub Releases](https://github.com/wangjt23/LoNo/releases)** for relea
 
 | Platform | Installation | Status |
 | :--- | :--- | :--- |
-| Windows · x64 | Extract the ZIP and run `LoNo.exe`, or use the Setup installer. | Preview builds are available on Releases. |
+| Windows · x64 | Extract the ZIP and run `LoNo.exe`, or use the Setup installer. | Stable releases are available on Releases. |
 | macOS · Apple Silicon / Intel | Open the matching DMG and drag LoNo into Applications. | Both architectures are available on Releases. |
 
 Keep the entire folder when using the Windows ZIP. Before updating, quit the old version from the tray or application menu.

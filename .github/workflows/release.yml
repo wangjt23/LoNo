@@ -138,4 +138,4 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "LoNo ${GITHUB_REF_NAME#v} · Windows & macOS Preview" --notes-file RELEASE-NOTES.md --prerelease
+          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "LoNo ${GITHUB_REF_NAME#v} · Windows & macOS" --notes-file RELEASE-NOTES.md --latest
