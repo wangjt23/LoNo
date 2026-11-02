@@ -71,6 +71,19 @@ try {
     assert.equal(Boolean(identity.args), !identity.packaged);
   }
   await main.getByRole('heading', { name: '提醒总览' }).waitFor();
+  if (process.platform === 'darwin') {
+    const mac = await app.evaluate(({ Menu }) => {
+      const menu = Menu.getApplicationMenu();
+      return { arch: process.arch, name: menu.items[0].label, roles: menu.items.flatMap(item => item.submenu?.items.map(child => child.role) || []) };
+    });
+    assert.equal(mac.arch, process.arch, 'test the native app architecture on each Mac runner');
+    assert.equal(mac.name, 'LoNo');
+    assert.ok(mac.roles.includes('quit'), 'Mac app menu supports Command+Q');
+    assert.ok(mac.roles.includes('paste'), 'Mac app menu preserves native editing shortcuts');
+    const keys = (await main.evaluate(() => window.reminder.invoke('snapshot'))).runtime.shortcuts;
+    assert.deepEqual(keys.map(key => key.label), ['Command+Shift+Space', 'Command+Option+Space']);
+    if (keys.some(key => key.registered)) assert.match(await main.locator('.new-button kbd').textContent(), /⌘/);
+  }
   await main.evaluate(() => { const probe=document.createElement('div'); probe.id='scroll-probe'; probe.style.height='1800px'; document.querySelector('#workspace').append(probe); });
   assert.equal(await main.evaluate(()=>document.documentElement.clientWidth===innerWidth),true,'document scrollbar takes no width');
   assert.equal(await main.evaluate(()=>getComputedStyle(document.documentElement).scrollbarWidth),'none');

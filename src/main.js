@@ -31,8 +31,10 @@ const dataArg = process.argv.find(a => a.startsWith('--data-dir='));
 // The public brand can change without moving databases or OS-encrypted secrets.
 app.setPath('userData', dataArg ? path.resolve(dataArg.slice(11)) : path.join(app.getPath('appData'), 'shiguang-reminder'));
 app.setName('LoNo');
-app.setAppUserModelId(WINDOWS_APP_ID);
-if (process.platform === 'win32') app.setToastActivatorCLSID(WINDOWS_TOAST_CLSID);
+if (process.platform === 'win32') {
+  app.setAppUserModelId(WINDOWS_APP_ID);
+  app.setToastActivatorCLSID(WINDOWS_TOAST_CLSID);
+}
 let mainWindow, captureWindow, tray, store, config, timer, quitting = false, syncing = false, captureExpanded = false;
 let shortcutOK = false, startupWarning = '', notificationWarning = '', notificationBusy = false;
 let shortcutState = { keys: [], active: null }, shortcutWarning = '', lastShortcutAt = 0;
@@ -120,7 +122,7 @@ function registerShortcuts() {
     if (captureWindow.isVisible() && captureWindow.isFocused()) captureWindow.hide(); else capture();
   });
   shortcutOK = Boolean(shortcutState.active);
-  shortcutWarning = !shortcutOK ? '两个全局快捷键均被占用，请使用托盘或快速记录按钮。' : !shortcutState.keys[0].registered ? `Ctrl+Shift+Space 已被占用；当前可用 ${shortcutState.active}。` : '';
+  shortcutWarning = !shortcutOK ? '两个全局快捷键均被占用，请使用托盘或快速记录按钮。' : !shortcutState.keys[0].registered ? `${shortcutState.keys[0].label} 已被占用；当前可用 ${shortcutState.active}。` : '';
   tray?.setToolTip(`LoNo · ${shortcutState.active || '托盘菜单'} 快速记录`);
 }
 function broadcast() { for (const win of [mainWindow, captureWindow]) if (win && !win.isDestroyed()) win.webContents.send('changed'); }
@@ -130,6 +132,13 @@ function snapshot() {
 }
 async function start() {
   nativeTheme.themeSource = 'light';
+  if (process.platform === 'darwin') {
+    Menu.setApplicationMenu(Menu.buildFromTemplate([
+      { label: 'LoNo', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
+      { role: 'editMenu' },
+      { label: '窗口', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { label: '打开 LoNo', click: showMain }, { label: '快速记录', click: capture }, { type: 'separator' }, { role: 'front' }] },
+    ]));
+  }
   store = await Store.open(path.join(app.getPath('userData'), 'reminders.sqlite'));
   if (quitting) return;
   config = new Config(path.join(app.getPath('userData'), 'settings.json'), safeStorage);
@@ -147,7 +156,10 @@ async function start() {
   }
   if (quitting) return;
   captureWindow = new BrowserWindow(windowOptions({ width: 680, height: 340, title: '快速记录 · LoNo', frame: false, hasShadow: true, roundedCorners: true, backgroundColor: '#f7f7f9', alwaysOnTop: true, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, show: false }));
-  for (const win of [mainWindow, captureWindow]) { secureWindow(win); win.setMenuBarVisibility(false); }
+  for (const win of [mainWindow, captureWindow]) {
+    secureWindow(win);
+    if (process.platform !== 'darwin') win.setMenuBarVisibility(false);
+  }
   for (const win of [mainWindow, captureWindow]) applyMaterial(win);
   nativeTheme.on('updated', () => { for (const win of [mainWindow, captureWindow]) if (!win.isDestroyed()) applyMaterial(win); broadcast(); });
   mainWindow.on('close', event => {
@@ -167,7 +179,7 @@ async function start() {
   await ensureCapturePage();
   if (quitting || mainWindow.isDestroyed()) return;
   if (!process.argv.includes('--quick-capture')) mainWindow.show();
-  tray = new Tray(trayIcon()); tray.setToolTip('LoNo · Ctrl+Shift+Space 快速记录');
+  tray = new Tray(trayIcon({ menuBar: process.platform === 'darwin' })); tray.setToolTip('LoNo · 快速记录');
   tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开LoNo', click: showMain }, { label: '快速记录', click: capture }, { type: 'separator' }, { label: '退出（停止提醒）', click: () => { quitting = true; app.quit(); } }]));
   tray.on('double-click', showMain);
   if (!exchangeTestMode) registerShortcuts();
@@ -270,7 +282,7 @@ function registerIPC() {
   });
   handle('test-notification', () => {
     if (!Notification.isSupported()) throw new Error('系统当前不支持通知');
-    sendNotification('提醒测试', '系统通知已触发；若未看到，请检查 Windows 通知与勿扰设置。', false);
+    sendNotification('提醒测试', '系统通知已触发；若未看到，请检查系统通知与勿扰设置。', false);
   });
   handle('export', async () => {
     const target = await dialog.showSaveDialog(mainWindow, { title: '导出本地记录（不含凭据）', defaultPath: 'shiguang-backup.json', filters: [{ name: 'JSON', extensions: ['json'] }] });
@@ -348,7 +360,7 @@ function sendNotification(title, body, persist = true, taskId, revision) {
     } catch { notificationWarning = '通知已显示，但状态保存失败，请检查磁盘空间；任务保留待重试。'; }
     broadcast();
   });
-  n.once('failed', () => { notificationWarning = '系统通知发送失败，提醒仍保留在列表中；请检查 Windows 通知权限。'; notifications.delete(n); broadcast(); });
+  n.once('failed', () => { notificationWarning = '系统通知发送失败，提醒仍保留在列表中；请检查系统通知权限。'; notifications.delete(n); broadcast(); });
   n.once('close', () => notifications.delete(n));
   try { n.show(); } catch { notifications.delete(n); notificationWarning = '系统通知发送失败，提醒保留待重试。'; broadcast(); }
   return n;
