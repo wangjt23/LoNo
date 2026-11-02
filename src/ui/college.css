@@ -95,7 +95,7 @@ h1 { color: var(--college-ink); font-weight: 650; letter-spacing: -.7px; }
 .info-box, .analysis-note { background: #881e5505; }
 .field input, .field select, #memory-form textarea { border-color: #881e5519; background: #ffffffa6; }
 .toggle-line input:checked { background: var(--college-berry); }
-.settings-save { background: #fcf8fbe8; }
+
 .settings-facts code { color: #7b6b75; }
 .memory-row { border-color: #881e550e; }
 #memory-filter { color: #786371; background: #881e5506; }
@@ -244,11 +244,11 @@ dialog::backdrop { background: #30202b28; }
 .protocol-choice label { display:flex; align-items:center; gap:8px; padding:10px 14px; background:#fff9; border:1px solid #881e5520; border-radius:9px; cursor:pointer; }
 .protocol-choice input { accent-color:#881e55; }
 [data-protocol][hidden] { display:none !important; }
-.settings-save { position:static; justify-content:flex-end; background:none; backdrop-filter:none; border:0; border-radius:0; padding:4px 0 12px; }
+
 @media(max-width:700px) { .secret-row { align-items:stretch; flex-direction:column; gap:8px; } }
 
 #settings-form { padding-bottom:88px; }
-.settings-save { position:fixed; right:32px; bottom:24px; z-index:8; width:auto; padding:0; margin:0; background:transparent; border:0; backdrop-filter:none; }
+
 .settings-save .primary { box-shadow:0 8px 24px #881e5533; }
 .mail-status { margin:14px 0 10px; padding:12px 14px; border:1px solid #881e5515; border-radius:10px; background:#ffffff70; font-size:12px; overflow-wrap:anywhere; }
 .mail-status p { margin:6px 0; }
@@ -259,3 +259,5 @@ dialog::backdrop { background: #30202b28; }
 
 .connection-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:18px; }
 .task-panel.records { scroll-margin-top:80px; }
+
+.settings-save { display:flex; position:fixed; right:32px; bottom:24px; z-index:8; width:auto; padding:0; margin:0; background:transparent; border:0; border-radius:0; }

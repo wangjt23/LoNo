@@ -309,13 +309,6 @@ function registerIPC() {
   });
   handle('sync', async () => { if(syncing)throw new Error('正在同步，请等待当前任务完成');await syncAll(); return syncStatus; });
   handle('clear-secret', async input => { if(syncing) throw new Error('正在同步，请稍后再清除'); const result=await config.clearSecret(input); resetPolling(); broadcast(); return result; });
-  handle('resume-mail', accountId => {
-    if (syncing) throw new Error('请等待当前同步完成');
-    const account=config.value.mailAccounts.find(a=>a.id===accountId);if(!account)throw new Error('邮箱不存在');
-    const key = accountStateKey(account);
-    store.setState(key, { ...store.state(key, {}), authPaused: false });
-    syncStatus.email = { state: 'idle', message: '暂停已解除，下次同步会重试' }; broadcast();
-  });
   handle('capture', async () => { if (!await capture()) throw new Error(captureWarning || '应用正在退出'); });
   handle('hide-capture', () => captureWindow.hide());
   handle('retry-shortcuts', () => { registerShortcuts(); broadcast(); return shortcutState; });

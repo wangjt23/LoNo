@@ -140,3 +140,16 @@ test('invalid structured suggestions receive bounded correction feedback instead
   const before=f.store.tasks();await f.service.send('按建议整理');
   assert.equal(calls,2);assert.deepEqual(f.store.tasks(),before);assert.equal(f.chat.messages().at(-1).detail.error,undefined);f.store.close();
 });
+
+test('agent future search shares the UI schedule boundary and excludes undated and completed tasks', async()=>{
+  const now=new Date(2026,10,3,14),store=await Store.open(),chat=new ChatStore(store);
+  const create=(title,time,status)=>{const a={shouldRemind:true,title,dueAt:time,remindAt:time,priority:'medium',confidence:1,reason:'fixture'};const r=store.ingest({text:title},a,a);if(status==='done')store.updateTask(r.id,'complete');return r.id;};
+  const future=create('未来提交',new Date(2026,10,4,0).toISOString());
+  create('今日提交',new Date(2026,10,3,16).toISOString());create('过期提交',new Date(2026,10,2,16).toISOString());create('无日期',null);create('已完成',new Date(2026,10,5,0).toISOString(),'done');
+  let calls=0;
+  const service=new ChatService(store,chat,()=>({enabled:true}),{now:()=>now,request:async(_model,messages)=>{
+    if(++calls===1)return {calls:[{type:'search',scope:'tasks',query:'',status:'future'}]};
+    const result=JSON.parse(messages.at(-1).content).LOCAL_QUERY_RESULT[0];assert.equal(result.total,1);assert.equal(result.items[0].id,future);return {reply:'明天有一条安排。'};
+  }});
+  try{await service.send('查看未来安排');assert.equal(calls,2);assert.equal(chat.messages().at(-1).detail.error,undefined);}finally{store.close();}
+});

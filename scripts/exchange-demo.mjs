@@ -93,7 +93,7 @@ try {
   await cue('03 / 从一次通知，沉淀可复用的流程', '候选记忆附带原文证据；只有你确认过的记忆才参与后续分析。', 5000);
   await main.locator('#editor [data-action="close"]').click();
   await main.locator('[data-action="memory-approve"]').click();
-  await main.locator('.memory-row').getByText('已确认', { exact: true }).waitFor();
+  await main.locator('.memory-row').getByText('全局生效', { exact: true }).waitFor();
   await app.evaluate(() => { globalThis.ewsDemo.phase = 1; });
   await main.locator('[data-view="sources"]').click();
   if (timed) {
@@ -123,8 +123,8 @@ try {
     const before = await app.evaluate(() => globalThis.ewsDemo.calls.length);
     await sync();
     assert.equal(await app.evaluate(() => globalThis.ewsDemo.calls.length), before);
-    await main.evaluate(() => window.reminder.invoke('resume-mail'));
     await app.evaluate(() => { globalThis.ewsDemo.status = 200; });
+    await main.evaluate(async () => { const s=await window.reminder.invoke('snapshot'); await window.reminder.invoke('sync-mail',s.settings.mailAccounts[0].id); });
     await sync();
   }
   const calls = await app.evaluate(() => globalThis.ewsDemo.calls);

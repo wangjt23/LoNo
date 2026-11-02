@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isToday, isOverdue, isReview } from '../src/ui/task-views.js';
+import { isToday, isOverdue, isReview, isFuture, matchesTaskView } from '../src/ui/task-views.js';
 
 test('today excludes overdue deadlines, older missed reminders and completed tasks', () => {
   const now = new Date(2026, 10, 2, 14);
@@ -11,6 +11,7 @@ test('today excludes overdue deadlines, older missed reminders and completed tas
   assert.equal(isToday({ ...task, remind_at: new Date(2026, 10, 1, 15).toISOString() }, now), false);
   assert.equal(isToday({ ...task, status: 'done' }, now), false);
   assert.equal(isToday({ ...task, due_at: null }, now), true);
+  assert.equal(isToday({ ...task, remind_at: null }, now), true, 'deadline-only records use the same schedule fallback');
 });
 
 test('review means no valid time; legacy review statuses with dates belong to scheduled views', () => {
@@ -36,4 +37,18 @@ test('review means no valid time; legacy review statuses with dates belong to sc
   assert.equal(isReview({ ...unscheduled, status: 'pending' }), true);
   assert.equal(isReview({ ...unscheduled, status: 'done' }), false);
   assert.equal(isReview({ ...unscheduled, due_at: 'invalid' }), true);
+});
+
+test('future starts at next local midnight and excludes today, overdue, undated and done', () => {
+  const now=new Date(2026,10,3,14), tomorrow=new Date(2026,10,4,0).toISOString();
+  const task={status:'pending',remind_at:tomorrow,due_at:new Date(2026,10,5,15).toISOString()};
+  assert.equal(isFuture(task,now),true);
+  assert.equal(matchesTaskView(task,'future',now),true);
+  assert.equal(isFuture({...task,status:'done'},now),false);
+  assert.equal(isFuture({...task,remind_at:new Date(2026,10,3,23,59).toISOString()},now),false);
+  assert.equal(isFuture({...task,due_at:new Date(2026,10,3,13).toISOString()},now),false);
+  assert.equal(isFuture({...task,remind_at:null},now),true);
+  assert.equal(isFuture({status:'review',remind_at:null,due_at:null},now),false);
+  assert.equal(isFuture({status:'pending',remind_at:'invalid',due_at:tomorrow},now),true);
+  assert.equal(matchesTaskView({...task,status:'done'},'active',now),false);
 });

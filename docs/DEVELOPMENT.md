@@ -33,13 +33,13 @@ npm run dist:win
 打包程序也可使用同一套桌面测试：
 
 ```powershell
-$env:SHIGUANG_EXECUTABLE = (Resolve-Path 'release/win-unpacked/Shiguang Reminder.exe').Path
+$env:SHIGUANG_EXECUTABLE = (Resolve-Path 'release/LoNo-0.3.11/LoNo.exe').Path
 npm run test:desktop
 ```
 
 当前验收结果与待验证边界见 [VALIDATION.md](../VALIDATION.md)。
 
-Windows 启动拦截的诊断与可信签名流程见 [WINDOWS-SIGNING.md](../WINDOWS-SIGNING.md)。正式签名使用独立的 `dist:win:signed` 命令；当前缺少签名凭据，尚未解除 Smart App Control 对 v0.1.1 的拦截。
+Windows 启动拦截的诊断与可信签名流程见 [WINDOWS-SIGNING.md](../WINDOWS-SIGNING.md)。正式签名使用独立的 `dist:win:signed` 命令；当前缺少可信签名凭据，其他电脑可能仍会受到系统应用控制策略拦截。
 
 Electron 首次运行可能下载运行时，打包时会下载 NSIS 工具。请确保可访问 npm 和 GitHub Releases。Electron binary 的版本和 SHA-256 由其 npm 包校验。运行环境未提供 npm 时可从 Node.js 官方发行版安装完整工具链。
 
@@ -47,6 +47,8 @@ Electron 首次运行可能下载运行时，打包时会下载 NSIS 工具。�
 src/core/analyzer.js    中文规则、模型接口、输出校验与降级
 src/core/store.js       SQLite、来源去重、提醒状态与持久化
 src/core/config.js      配置校验与系统凭据加密
+src/core/task-views.js  UI与Agent共享的今日/未来/过期/待确认分类
+src/ui/components/sources.js  信息来源页面纯渲染组件
 src/core/connectors.js  只读 IMAP、JSON bridge
 src/main.js            Electron、调度、托盘、全局快捷键、IPC
 src/preload.cjs         最小能力桥接

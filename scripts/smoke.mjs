@@ -490,15 +490,11 @@ try {
     const analysis = await window.reminder.invoke('analyze', '提交过期测试材料');
     await window.reminder.invoke('save-capture', { token: analysis.token, fields: { title: '过期测试材料', dueAt: new Date(Date.now() - 86400000).toISOString(), remindAt: null, priority: 'medium' } });
   });
-  await memoryRestarted.locator('[data-view="unfinished"]').click();
-  assert.equal(await memoryRestarted.locator('[data-view="today"]').evaluate(el=>el.nextElementSibling.dataset.view),'unfinished','unfinished follows today');
-  const unfinishedSnapshot=await memoryRestarted.evaluate(()=>window.reminder.invoke('snapshot'));
-  const unfinishedTasks=unfinishedSnapshot.tasks.filter(t=>t.status!=='done');
-  assert.equal(await memoryRestarted.locator('.task-row').count(),unfinishedTasks.length);
-  assert.equal(await memoryRestarted.locator('#count-unfinished').textContent(),String(unfinishedTasks.length));
+  await memoryRestarted.locator('[data-view="future"]').click();
+  assert.equal(await memoryRestarted.locator('[data-view="today"]').evaluate(el=>el.nextElementSibling.dataset.view),'future','future follows today');
+  assert.equal(await memoryRestarted.getByText('过期测试材料',{exact:true}).count(),0);
   assert.equal(await memoryRestarted.locator('.task-row.completed').count(),0);
   assert.equal(await memoryRestarted.locator('.stats').count(),0);
-  await memoryRestarted.getByText('过期测试材料',{exact:true}).waitFor();
   await memoryRestarted.locator('[data-view="today"]').click();
   assert.equal(await memoryRestarted.getByText('过期测试材料', { exact: true }).count(), 0);
   await memoryRestarted.locator('[data-view="review"]').click();
@@ -516,12 +512,22 @@ try {
   await memoryRestarted.locator('[data-view="review"]').click();
   await memoryRestarted.getByText('无日期测试材料', { exact: true }).waitFor();
   assert.equal(await memoryRestarted.locator('#count-review').textContent(), '1');
-  await memoryRestarted.locator('[data-view="unfinished"]').click();
-  await memoryRestarted.getByText('无日期测试材料',{exact:true}).waitFor();
-  assert.equal(await memoryRestarted.getByText('过期测试材料',{exact:true}).count(),0,'completed items leave unfinished');
+  await memoryRestarted.locator('[data-view="future"]').click();
+  assert.equal(await memoryRestarted.getByText('无日期测试材料',{exact:true}).count(),0,'undated records are not future schedules');
+  assert.equal(await memoryRestarted.getByText('过期测试材料',{exact:true}).count(),0,'completed items are not future schedules');
 
   await memoryRestarted.locator('[data-view="overdue"]').click();
   assert.equal(await memoryRestarted.getByText('无日期测试材料', { exact: true }).count(), 0);
+  await memoryRestarted.evaluate(async () => {
+    const a=await window.reminder.invoke('analyze','提交未来安排测试');
+    const d=new Date();d.setDate(d.getDate()+2);d.setHours(15,0,0,0);
+    await window.reminder.invoke('save-capture',{token:a.token,fields:{title:'未来安排测试',dueAt:d.toISOString(),remindAt:d.toISOString(),priority:'medium'}});
+  });
+  await memoryRestarted.locator('[data-view="future"]').click();
+  const futureRow=memoryRestarted.locator('.task-row').filter({hasText:'未来安排测试'});await futureRow.waitFor();
+  assert.equal(Number(await memoryRestarted.locator('#count-future').textContent()),await memoryRestarted.locator('.task-row').count());
+  await futureRow.locator('[data-action="complete"]').click();
+  await futureRow.waitFor({state:'detached'});
   await memoryRestarted.evaluate(()=>window.reminder.invoke('smoke','mail-sources'));
   await memoryRestarted.locator('[data-view="all"]').click();
   for(const alias of ['mail1','mail2']) {
