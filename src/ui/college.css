@@ -138,4 +138,34 @@ dialog::backdrop { background: #30202b28; }
 .ai-summary[hidden], .analysis-note[hidden] { display: none; }
 .review-actions { flex-wrap: wrap; align-items: center; margin-top: 14px; }
 .review-applied { font-size: 12px; color: #881e55; line-height: 1.75; background: #f4e6efb3; padding: 12px 15px; border-radius: 10px; }
+.chat-panel { max-width: 980px; margin: 0 auto; border: 1px solid #ffffffbd; border-radius: 20px; overflow: hidden; background: #ffffff70; box-shadow: 0 12px 40px #58243c08; }
+.chat-intro { display: flex; align-items: center; gap: 12px; padding: 18px 24px; border-bottom: 1px solid #881e550c; }
+.chat-orbit { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; color: #881e55; background: #f1e1ed; font-size: 28px; }
+.chat-intro strong { font-size: 14px; } .chat-intro small { display: block; font-size: 11px; color: #947c89; margin-top: 2px; }
+.chat-status { margin-left: auto; color: #947c89; font-size: 11px; }
+.chat-page { height: calc(100vh - 58px); display: flex; flex-direction: column; padding-top: 26px !important; padding-bottom: 20px !important; }
+.chat-page .page-heading { flex-shrink: 0; margin-bottom: 18px; }
+.chat-page #view-content { flex: 1; min-height: 0; display: flex; }
+.chat-page .runtime-notice, .chat-page > .warning { flex-shrink: 0; }
+.chat-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.chat-intro, .chat-composer { flex-shrink: 0; }
+.chat-scroll { flex: 1; min-height: 70px; overflow-y: auto; padding: 24px; scroll-behavior: smooth; }
+.chat-empty { padding: 34px 20px; text-align: center; color: #86757e; } .chat-empty h2 { color: #493b43; font-size: 22px; font-weight: 550; }
+.chat-examples { display: grid; gap: 9px; max-width: 440px; margin: 25px auto 0; }
+.chat-examples button { text-align: left; border: 1px solid #881e5515; background: #ffffff80; border-radius: 11px; padding: 11px 14px; color: #80516c; font-size: 12px; }
+.chat-message { max-width: 92%; margin: 0 0 24px; } .chat-message > small { color: #9c8593; font-size: 11px; }
+.chat-message.user { margin-left: auto; max-width: 80%; } .chat-message.user > small { display: block; text-align: right; }
+.chat-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 10px; font-size: 13px; line-height: 1.85; color: #453940; }
+.chat-message.user .chat-text { background: #eee0e9b3; border-radius: 15px 15px 4px 15px; padding: 12px 16px; }
+.chat-references { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0; }
+.chat-reference { font-size: 11px; color: #88506e; padding: 5px 8px; border-radius: 7px; background: #f1e7eeb3; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.chat-action, .chat-memory { background: #fff9; border: 1px solid #881e5518; border-radius: 12px; padding: 14px; margin: 12px 0; font-size: 12px; }
+.chat-action dl { display: grid; gap: 9px; } .chat-action dt { color: #9b7b8c; font-size: 11px; } .chat-action dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+.chat-action .ai-summary-head { align-items: flex-start; } .chat-action small, .chat-memory small { font-size: 11px; color: #927c88; }
+.chat-memory { border-left: 3px solid #d49abf; } .chat-memory strong { color: #88506e; font-weight: 550; }
+.chat-composer { padding: 14px 20px 16px; border-top: 1px solid #881e5512; background: #ffffff8c; }
+.chat-composer textarea { display: block; resize: vertical; width: 100%; min-height: 60px; max-height: 170px; border: 0; border-radius: 9px; background: #ffffff70; padding: 10px 12px; font-size: 13px; }
+.chat-composer > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.chat-composer small { color: #9b8592; font-size: 10px; } .chat-thinking { color: #a26a8b; font-size: 12px; }
+@media (forced-colors: active) { .chat-panel, .chat-action, .chat-memory, .chat-composer { background: Canvas; border: 1px solid CanvasText; } .chat-text, .chat-orbit, .chat-reference { color: CanvasText; } }
 @media (forced-colors: active) { .ai-summary { background: Canvas; border-color: CanvasText; } .ai-summary-head strong, .summary-overview, .summary-points, .summary-points li::marker, .ai-summary small, .summary-empty { color: CanvasText; } }

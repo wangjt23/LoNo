@@ -16,6 +16,8 @@ import { exchangeInput, exchangeRequestOptions } from './core/exchange.js';
 import { extractMemories } from './core/memory.js';
 import { MessageService } from './core/message-service.js';
 import { TaskReviewService } from './core/task-review-service.js';
+import { ChatStore } from './core/chat-store.js';
+import { ChatService } from './core/chat-service.js';
 import { configureWindowsIdentity, WINDOWS_APP_ID, WINDOWS_TOAST_CLSID } from './windows-shell.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -34,7 +36,7 @@ let shortcutState = { keys: [], active: null }, shortcutWarning = '', lastShortc
 let captureBlurTimer;
 let startupPhase = 'data', captureReady = false, captureLoading = null, captureWarning = '';
 const previews = new Map();
-let messages, taskReviews;
+let messages, taskReviews, chatStore, chatAgent;
 const notifications = new Set();
 const syncStatus = { email: { state: 'idle', message: '尚未同步' }, wecom: { state: 'idle', message: '尚未同步' } };
 
@@ -97,6 +99,7 @@ async function capture() {
   if (!await ensureCapturePage()) { if (!quitting) showMain(); return false; }
   if (quitting || captureWindow.isDestroyed()) return false;
   clearTimeout(captureBlurTimer);
+  if (!captureWindow.isVisible()) { captureExpanded = false; captureWindow.webContents.send('capture-reset'); }
   layoutCapture(true);
   if (captureWindow.isMinimized()) captureWindow.restore();
   captureWindow.show(); captureWindow.moveTop(); captureWindow.focus(); captureWindow.webContents.focus();
@@ -130,6 +133,8 @@ async function start() {
   if (quitting) return;
   messages = new MessageService(store, () => config.value);
   taskReviews = new TaskReviewService(store, () => config.value.model);
+  chatStore = new ChatStore(store);
+  chatAgent = new ChatService(store, chatStore, () => config.value.model);
   startupPhase = 'windows';
   mainWindow = new BrowserWindow(windowOptions({ width: 1260, height: 850, minWidth: 960, minHeight: 650, title: 'LoNo · Loop Notify', show: false }));
   if (process.platform === 'win32') {
@@ -147,6 +152,7 @@ async function start() {
     else { event.preventDefault(); mainWindow.hide(); }
   });
   captureWindow.on('close', event => { if (!quitting) { event.preventDefault(); captureWindow.hide(); } });
+  captureWindow.on('hide', () => { captureExpanded = false; captureWindow.webContents.send('capture-reset'); });
   captureWindow.on('blur', () => {
     clearTimeout(captureBlurTimer);
     captureBlurTimer = setTimeout(() => { if (!captureWindow.isDestroyed() && !captureWindow.isFocused()) captureWindow.hide(); }, 100);
@@ -177,6 +183,10 @@ function registerIPC() {
     catch (error) { return { ok: false, error: error.name === 'ZodError' ? '输入格式无效，请检查日期、地址或必填项' : error.message || '操作失败' }; }
   });
   handle('snapshot', snapshot);
+  handle('chat-history', () => chatStore.messages());
+  handle('chat-send', async text => { try { return await chatAgent.send(text); } finally { broadcast(); } });
+  handle('chat-resolve', ({ id, decision }) => { chatStore.resolve(id, decision); broadcast(); void checkDue(); });
+  handle('chat-source', id => { if (typeof id !== 'string' || id.length > 100) throw new Error('来源标识无效'); const record = store.record(id); if (!record) throw new Error('找不到原始记录'); return record; });
   handle('review-task', id => taskReviews.preview(id));
   handle('apply-task-review', input => { taskReviews.apply(input); broadcast(); void checkDue(); });
   handle('save-memory', input => { const id = store.saveMemory(input); broadcast(); return id; });
@@ -260,7 +270,7 @@ function registerIPC() {
   });
   handle('export', async () => {
     const target = await dialog.showSaveDialog(mainWindow, { title: '导出本地记录（不含凭据）', defaultPath: 'shiguang-backup.json', filters: [{ name: 'JSON', extensions: ['json'] }] });
-    if (!target.canceled) fs.writeFileSync(target.filePath, JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), tasks: store.tasks(), records: store.records(null), memories: store.memories() }, null, 2));
+    if (!target.canceled) fs.writeFileSync(target.filePath, JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), tasks: store.tasks(), records: store.records(null), memories: store.memories(), chat: chatStore.messages(0) }, null, 2));
     return !target.canceled;
   });
   handle('import', async () => {

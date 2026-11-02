@@ -140,10 +140,14 @@ export class Store {
     });
   }
   deleteMemory(id) { return this.transaction(() => this.db.run('DELETE FROM memories WHERE id=?', [id])); }
-  updateTask(id, action, fields) {
-    return this.transaction(() => {
+  updateTask(id, action, fields, expectedRevision) {
+    return this.transaction(() => this.mutateTask(id, action, fields, expectedRevision));
+  }
+  // Caller must own a transaction; used when a chat action and task change commit together.
+  mutateTask(id, action, fields, expectedRevision) {
     const current = this.all('SELECT * FROM tasks WHERE id=?', [id])[0];
     if (!current) throw new Error('找不到提醒');
+    if (expectedRevision !== undefined && current.revision !== expectedRevision) throw new Error('记录已被修改，请让 Agent 重新查询后再操作');
     if (action === 'complete') this.db.run("UPDATE tasks SET status='done', completed_at=? WHERE id=?", [new Date().toISOString(), id]);
     else if (action === 'restore') this.db.run("UPDATE tasks SET status=CASE WHEN remind_at IS NULL THEN 'review' ELSE 'pending' END, completed_at=NULL, notified_at=NULL WHERE id=?", [id]);
     else if (action === 'snooze') this.db.run("UPDATE tasks SET remind_at=?, status='pending', notified_at=NULL WHERE id=?", [new Date(Date.now() + 15 * 60000).toISOString(), id]);
@@ -154,7 +158,6 @@ export class Store {
       this.db.run("UPDATE tasks SET title=?, due_at=?, remind_at=?, priority=?, status=CASE WHEN status='done' THEN 'done' ELSE ? END, notified_at=CASE WHEN status='done' THEN notified_at ELSE NULL END WHERE id=?", [f.title, f.dueAt, f.remindAt, f.priority, f.remindAt ? 'pending' : 'review', id]);
     } else throw new Error('不支持的操作');
     this.db.run('UPDATE tasks SET revision=revision+1 WHERE id=?', [id]);
-    });
   }
   due(now = new Date()) { return this.all("SELECT * FROM tasks WHERE status='pending' AND remind_at<=? AND notified_at IS NULL ORDER BY remind_at LIMIT 20", [now.toISOString()]); }
   notified(id, now = new Date(), revision) {

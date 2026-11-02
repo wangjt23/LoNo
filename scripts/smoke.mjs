@@ -28,7 +28,18 @@ const server = http.createServer((req, res) => {
   } else {
     assert.equal(req.headers.authorization, 'Bearer model-test-secret'); modelCalls++;
     let body = ''; req.on('data', chunk => body += chunk); req.on('end', () => {
-      assert.ok(JSON.parse(body).messages[1].content.includes('提交'));
+      const payload = JSON.parse(body);
+      if (payload.messages[0].content.startsWith('你是LoNo工作助理')) {
+        const user = [...payload.messages].reverse().filter(m => m.role === 'user').map(m => { try { return JSON.parse(m.content).message; } catch { return null; } }).find(Boolean);
+        let answer;
+        if (user.includes('请记住')) answer = {reply:'我已提炼为候选记忆，请确认后记住。',memories:[{kind:'preference',content:'我习惯重要会议提前一天提醒',evidence:'我习惯重要会议提前一天提醒'}]};
+        else {
+          const last = JSON.parse(payload.messages.at(-1).content).LOCAL_QUERY_RESULT?.[0];
+          answer = !last ? {calls:[{type:'search',scope:'tasks',query:'审核后提交材料'}]} : last.items ? {calls:[{type:'read',scope:'tasks',id:last.items[0].id}]} : {reply:'找到提交材料的记录，建议改为低优先级，等待你确认。',changes:[{taskId:last.record.id,action:'edit',fields:{title:last.record.title,dueAt:last.record.dueAt,remindAt:last.record.remindAt,priority:'low'}}]};
+        }
+        res.end(JSON.stringify({choices:[{message:{content:JSON.stringify(answer)}}]}));return;
+      }
+      assert.ok(payload.messages[1].content.includes('提交'));
       const due = new Date(Date.now() + 86400000).toISOString();
       if (failReview) { res.end(JSON.stringify({ choices: [{ message: { content: '{"invalid":true}' } }] })); return; }
       if (noActionReview) {
@@ -76,16 +87,24 @@ try {
   assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('capture=1')).isVisible()), false, 'outside click dismisses the panel');
   await main.locator('.new-button').click();
   await capture.waitForFunction(() => document.activeElement?.id === 'capture-text');
-  assert.equal(await capture.locator('#capture-text').inputValue(), '未保存的草稿', 'outside click preserves draft');
+  assert.equal(await capture.locator('#capture-text').inputValue(), '', 'outside click starts a fresh input');
   await capture.locator('#capture-text').press('Escape');
   await main.locator('.new-button').click();
-  assert.equal(await capture.locator('#capture-text').inputValue(), '未保存的草稿', 'Escape preserves draft');
+  assert.equal(await capture.locator('#capture-text').inputValue(), '', 'Escape starts a fresh input');
   await capture.locator('#capture-text').fill('明天下午三点提醒我提交项目材料，提前半小时提醒');
   await capture.locator('#capture-text').press('Enter');
   await capture.locator('#capture-save-form').waitFor();
   const reminder = await capture.locator('[name="remindAt"]').inputValue();
   assert.ok(reminder.endsWith('14:30'), `Chinese date/lead parse: ${reminder}`);
   assert.ok(await capture.evaluate(() => { const b = document.querySelector('#capture-save-form button[type="submit"]').getBoundingClientRect(); return b.bottom <= innerHeight && b.top >= 0; }), 'save action fits in the expanded capture');
+  await capture.locator('#capture-save-form [name="title"]').fill('关闭后应丢弃的编辑');
+  await capture.locator('#capture-text').press('Escape');
+  await main.locator('.new-button').click();
+  assert.equal(await capture.locator('#capture-text').inputValue(),'');
+  assert.equal(await capture.locator('#capture-save-form').count(),0,'dismissed preview and its edits do not return');
+  await capture.locator('#capture-text').fill('明天下午三点提醒我提交项目材料，提前半小时提醒');
+  await capture.locator('#capture-text').press('Enter');
+  await capture.locator('#capture-save-form').waitFor();
   await capture.screenshot({ path: path.join(artifacts, '02-capture.png') });
   await capture.locator('#capture-text').press('Control+Enter');
   await main.locator('.task-row').waitFor();
@@ -128,6 +147,15 @@ try {
   await capture.getByText('输入已修改，请重新分析', { exact: true }).waitFor();
   assert.equal(await capture.locator('#capture-save-form').count(), 0, 'stale analysis cannot be saved for edited input');
   assert.equal(await capture.locator('#capture-text').inputValue(), '后天提交新内容');
+  await capture.locator('#capture-text').fill('明天提交关闭前的内容');
+  await capture.locator('#analyze-button').click();
+  await capture.locator('#capture-text').press('Escape');
+  await main.locator('.new-button').click();
+  await capture.locator('#capture-text').fill('新的输入');
+  await capture.waitForTimeout(350);
+  assert.equal(await capture.locator('#capture-text').inputValue(), '新的输入');
+  assert.equal(await capture.locator('#capture-save-form').count(), 0, 'late model response cannot restore a dismissed preview');
+  await capture.locator('#capture-text').press('Escape');
   modelDelay = 0;
   const modelCallsBeforeBridge = modelCalls;
   assert.ok(!readFileSync(path.join(dir, 'settings.json'), 'utf8').includes('test-secret'), 'secrets must be encrypted');
@@ -200,13 +228,33 @@ try {
   assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t => t.id === infoTask.id).status, 'done');
   noActionReview = false;
   await main.evaluate(id => window.reminder.invoke('update-task', { id, action: 'restore' }), infoTask.id);
+  await main.locator('[data-view="chat"]').click();
+  await main.locator('#chat-input').fill('把提交材料改为低优先级');
+  await main.locator('#chat-input').press('Enter');
+  await main.locator('[data-action="chat-apply"]').waitFor();
+  assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t=>t.id===summaryTask.id).priority,'high','chat suggestion is read-only until confirmation');
+  assert.ok(await main.locator('#chat-form button[type="submit"]').evaluate(el => el.getBoundingClientRect().bottom <= innerHeight),'chat composer stays in viewport');
+  await main.locator('#toast').evaluate(el=>el.className='');
+  await main.screenshot({ path: path.join(artifacts, '09-agent-chat.png') });
+  await main.locator('[data-action="chat-apply"]').click();
+  await main.getByText('修改已保存',{exact:true}).waitFor();
+  assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).tasks.find(t=>t.id===summaryTask.id).priority,'low');
+  await main.locator('#chat-input').fill('我习惯重要会议提前一天提醒，请记住');
+  await main.locator('#chat-input').press('Enter');
+  await main.locator('.chat-memory [data-action="memory-approve"]').waitFor();
+  const chatMemory=(await main.evaluate(() => window.reminder.invoke('snapshot'))).memories.find(m=>m.content==='我习惯重要会议提前一天提醒');
+  assert.equal(chatMemory.status,'candidate');
+  await main.locator('.chat-memory [data-action="memory-approve"]').click();
+  await main.getByText('已记住',{exact:true}).waitFor();
+  assert.equal((await main.evaluate(() => window.reminder.invoke('snapshot'))).memories.find(m=>m.id===chatMemory.id).status,'approved');
+  await main.locator('[data-view="all"]').click();
   // Export using the actual dialog path while replacing only OS file picking.
   const exportFile = path.join(dir, 'export.json');
   await app.evaluate(({ dialog }, filename) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename }); }, exportFile);
   await main.locator('[data-view="sources"]').click();
   await main.locator('[data-action="export"]').click();
   await main.getByText('记录已导出（不包含连接密钥）', { exact: true }).waitFor();
-  assert.equal(JSON.parse(readFileSync(exportFile, 'utf8')).records.length, 2);
+  assert.equal(JSON.parse(readFileSync(exportFile, 'utf8')).records.length, 3);
   for (const key of snapshot.runtime.shortcuts) {
     const registered = await app.evaluate(({ globalShortcut }, accelerator) => globalShortcut.isRegistered(accelerator), key.accelerator);
     assert.equal(key.registered, registered);
@@ -220,6 +268,11 @@ try {
   await restarted.locator('.task-row').first().waitFor();
   assert.equal(await restarted.locator('.task-row').count(), 2, 'records survive restart');
   const restored = await restarted.evaluate(() => window.reminder.invoke('snapshot'));
+  const persistedChat = await restarted.evaluate(() => window.reminder.invoke('chat-history'));
+  assert.equal(persistedChat.length,4,'chat history survives restart');
+  assert.equal(persistedChat[1].actions[0].status,'applied');
+  assert.equal(restored.memories.find(m=>m.id===chatMemory.id).status,'approved');
+  await restarted.evaluate(id=>window.reminder.invoke('delete-memory',id),chatMemory.id);
   assert.equal(JSON.parse(restored.tasks.find(t => t.id === summaryTask.id).analysis).summary.keyPoints.length, 3, 'summary survives restart');
   assert.equal(restored.settings.model.hasApiKey, true, 'OS encrypted credentials decrypt on restart');
   assert.ok(!restored.runtime.startupWarning.includes('设置或系统密钥无法读取'), 'encrypted settings load on restart even when another app owns the shortcut');
@@ -303,5 +356,5 @@ try {
   await memoryRestarted.locator('[data-view="overdue"]').click();
   assert.equal(await memoryRestarted.getByText('无日期测试材料', { exact: true }).count(), 0);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, Escape draft retention, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication, memory review/source/recall/edit/search/add/delete/restart', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, fresh capture on dismissal and late-response isolation, Agent chat query/edit/memory/restart, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication, memory review/source/recall/edit/search/add/delete/restart', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
 } finally { if (app) await app.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

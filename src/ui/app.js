@@ -1,3 +1,4 @@
+import { renderChat } from './components/chat.js';
 import { renderTaskReview } from './components/task-review.js';
 import { esc, dateText } from './format.js';
 import { renderAiSummary } from './components/ai-summary.js';
@@ -6,12 +7,13 @@ import { readableSource } from '../core/source-text.js';
 import { createRefreshQueue } from './refresh-queue.js';
 const api = window.reminder;
 const $ = selector => document.querySelector(selector);
-const labels = { manual: '快捷记录', email: '邮件', wecom: '企业微信', high: '重要', medium: '普通', low: '低优先级', pending: '进行中', review: '待确认', done: '已完成' };
+const labels = { manual: '快捷记录', chat: 'Agent 聊天', email: '邮件', wecom: '企业微信', high: '重要', medium: '普通', low: '低优先级', pending: '进行中', review: '待确认', done: '已完成' };
 const isCapture = new URLSearchParams(location.search).has('capture');
+let chatMessages = [], chatBusy = false, chatDraft = '';
 let reviewResult = null, pendingReview = null, editingSession = 0;
-let data, view = 'all', query = '', preview = null, editing = null, busy = false, captureRevision = 0;
+let data, view = 'all', query = '', preview = null, editing = null, busy = false, captureRevision = 0, captureSession = 0;
 const refresh = createRefreshQueue(refreshOnce);
-const icons = {
+const icons = { chat: '<path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-3 2V11.5a8.5 8.5 0 1 1 20 0Z"/><path d="M7 10h10M7 14h6"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -30,7 +32,7 @@ function toast(text, error = false) { $('#toast').textContent = text; $('#toast'
 const overdue = task => isOverdue(task);
 const today = task => isToday(task);
 function modelNotice() { return data?.settings.model.enabled ? '已启用模型 · 内容将发送到配置的模型服务' : '离线分析 · 输入内容不会发送到模型服务'; }
-const titles = { all: ['提醒总览', '让每一件重要的事，都有着落。'], today: ['今日安排', '专注今天，也照顾那些尚未完成的事。'], overdue: ['已过期', '超过截止时间（未设截止时按提醒时间）的未完成事项。'], review: ['待确认', '尚无明确时间的事项，补充时间后即可安排提醒。'], done: ['已完成', '每一次完成，都值得被记住。'], sources: ['信息来源', '把分散的信息，汇聚到同一个地方。'], memories: ['工作记忆', '把常用经验留下，让下一次更从容。'], settings: ['偏好设置', '按你的工作方式，连接信息与智能。'] };
+const titles = { chat: ['Agent 对话', '在对话中查找、理解和整理你的工作。'], all: ['提醒总览', '让每一件重要的事，都有着落。'], today: ['今日安排', '专注今天，也照顾那些尚未完成的事。'], overdue: ['已过期', '超过截止时间（未设截止时按提醒时间）的未完成事项。'], review: ['待确认', '尚无明确时间的事项，补充时间后即可安排提醒。'], done: ['已完成', '每一次完成，都值得被记住。'], sources: ['信息来源', '把分散的信息，汇聚到同一个地方。'], memories: ['工作记忆', '把常用经验留下，让下一次更从容。'], settings: ['偏好设置', '按你的工作方式，连接信息与智能。'] };
 
 async function refreshOnce() {
   data = await api.invoke('snapshot');
@@ -41,11 +43,11 @@ async function refreshOnce() {
     if (!$('#workspace')) shell();
     updateNav();
     $('.new-button kbd').textContent = data.runtime.shortcut === 'Ctrl+Alt+Space' ? 'Ctrl Alt ␣' : data.runtime.shortcut ? 'Ctrl ⇧ ␣' : '未注册';
-    if (view !== 'settings' || !$('#settings-form')) renderView();
+    if ((view !== 'settings' || !$('#settings-form')) && (view !== 'chat' || !$('#chat-panel'))) renderView();
   }
 }
 function shell() {
-  $('#app').innerHTML = `<aside class="sidebar"><div class="brand"><div class="brand-mark"><img src="brand.svg" alt=""></div><div>LoNo<small>Loop Notify</small></div></div><button class="primary new-button" data-action="capture">${icon('plus')} 快速记录 <kbd>Ctrl ⇧ Space</kbd></button><div class="nav-caption">我的提醒</div><nav aria-label="提醒列表">${[['all', 'grid', '提醒总览'], ['today', 'sun', '今日安排'], ['overdue', 'clock', '已过期'], ['review', 'clock', '待确认'], ['done', 'check', '已完成']].map(([id, i, name]) => `<button data-view="${id}">${icon(i)}<span>${name}</span><b id="count-${id}"></b></button>`).join('')}</nav><div class="nav-caption second">管理</div><nav aria-label="管理"><button data-view="memories">${icon('grid')}<span>工作记忆</span></button><button data-view="sources">${icon('inbox')}<span>信息来源</span></button><button data-view="settings">${icon('settings')}<span>偏好设置</span></button></nav><div class="sidebar-footer"><span class="status-dot"></span> 记录保存在此设备<small>在托盘中继续为你提醒</small></div></aside><main id="workspace"><header class="topbar"><div class="breadcrumb"><b id="crumb"></b></div><span class="today-date">${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</span></header><div id="content"></div></main><dialog id="editor"></dialog>`;
+  $('#app').innerHTML = `<aside class="sidebar"><div class="brand"><div class="brand-mark"><img src="brand.svg" alt=""></div><div>LoNo<small>Loop Notify</small></div></div><button class="primary new-button" data-action="capture">${icon('plus')} 快速记录 <kbd>Ctrl ⇧ Space</kbd></button><div class="nav-caption">我的提醒</div><nav aria-label="提醒列表">${[['all', 'grid', '提醒总览'], ['today', 'sun', '今日安排'], ['overdue', 'clock', '已过期'], ['review', 'clock', '待确认'], ['done', 'check', '已完成']].map(([id, i, name]) => `<button data-view="${id}">${icon(i)}<span>${name}</span><b id="count-${id}"></b></button>`).join('')}</nav><div class="nav-caption second">管理</div><nav aria-label="管理"><button data-view="chat">${icon('chat')}<span>Agent 对话</span></button><button data-view="memories">${icon('grid')}<span>工作记忆</span></button><button data-view="sources">${icon('inbox')}<span>信息来源</span></button><button data-view="settings">${icon('settings')}<span>偏好设置</span></button></nav><div class="sidebar-footer"><span class="status-dot"></span> 记录保存在此设备<small>在托盘中继续为你提醒</small></div></aside><main id="workspace"><header class="topbar"><div class="breadcrumb"><b id="crumb"></b></div><span class="today-date">${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}</span></header><div id="content"></div></main><dialog id="editor"></dialog>`;
 }
 function updateNav() {
   const active = data.tasks.filter(t => t.status !== 'done');
@@ -54,14 +56,21 @@ function updateNav() {
   $('#crumb').textContent = titles[view][0];
 }
 function renderView() {
+  $('#content').classList.toggle('chat-page', view === 'chat');
   const [title, subtitle] = titles[view];
   const warning = [data.runtime.startupWarning, data.runtime.shortcutWarning, data.runtime.captureWarning].filter(Boolean).join(' ');
   $('#content').innerHTML = `<section class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div><button class="secondary" data-action="sync">${icon('refresh')} 同步</button></section>${warning ? `<details class="runtime-notice"><summary>快捷输入或本地设置需要留意</summary><p>${esc(warning)}</p></details>` : ''}${data.runtime.notificationWarning ? `<div class="warning">${esc(data.runtime.notificationWarning)}</div>` : ''}<div id="view-content"></div>`;
   if (view === 'settings') renderSettings();
   else if (view === 'sources') renderSources();
   else if (view === 'memories') renderMemories();
+  else if (view === 'chat') renderChatPanel();
   else renderTasks();
 }
+function renderChatPanel() {
+  $('#view-content').innerHTML = renderChat({ messages: chatMessages, busy: chatBusy, enabled: data.settings.model.enabled, draft: chatDraft, memories: data.memories });
+  const scroll = $('#chat-scroll'); scroll.scrollTop = scroll.scrollHeight;
+}
+async function loadChat() { chatMessages = await api.invoke('chat-history'); if (view === 'chat') renderChatPanel(); }
 function renderTasks() {
   const active = data.tasks.filter(t => t.status !== 'done');
   const dueToday = active.filter(t => today(t)).length;
@@ -142,16 +151,19 @@ function getTaskFields(form) { const f = new FormData(form); return { title: f.g
 
 document.addEventListener('click', async event => {
   const nav = event.target.closest('[data-view]');
-  if (nav) { view = nav.dataset.view; query = ''; updateNav(); renderView(); return; }
+  if (nav) { view = nav.dataset.view; query = ''; updateNav(); renderView(); if (view === 'chat') await loadChat(); return; }
   const button = event.target.closest('[data-action]'); if (!button) return;
   const action = button.dataset.action;
   try {
+    if (action === 'chat-example') { chatDraft = button.dataset.text; $('#chat-input').value = chatDraft; $('#chat-input').focus(); }
+    if (action === 'chat-apply' || action === 'chat-dismiss') { button.disabled = true; try { await api.invoke('chat-resolve', { id: button.dataset.id, decision: action === 'chat-apply' ? 'apply' : 'dismiss' }); await refresh(); await loadChat(); toast(action === 'chat-apply' ? '修改已保存' : '建议已忽略'); } finally { button.disabled = false; } }
+    if (action === 'chat-source') { const record = await api.invoke('chat-source', button.dataset.id); $('#editor').innerHTML = '<div class="dialog-header"><h2>原始记录</h2><button class="close-button" data-action="close">×</button></div><p class="raw-text">' + esc(readableSource(record.text)) + '</p>'; $('#editor').showModal(); }
     if (action === 'memory-new') openMemory();
     if (action === 'memory-edit') openMemory(button.dataset.id);
     if (action === 'memory-approve' || action === 'memory-dismiss') {
       const m = data.memories.find(m => m.id === button.dataset.id);
       await api.invoke('save-memory', { ...m, status: action === 'memory-approve' ? 'approved' : 'dismissed' });
-      await refresh(); toast(action === 'memory-approve' ? '记忆已确认，后续分析可检索使用' : '候选已忽略');
+      await refresh(); if (view === 'chat') await loadChat(); toast(action === 'memory-approve' ? '记忆已确认，后续分析可检索使用' : '候选已忽略');
     }
     if (action === 'memory-delete') { await api.invoke('delete-memory', button.dataset.id); $('#editor').close(); await refresh(); toast('记忆已删除；历史分析记录仍保留当时的依据'); }
     if (action === 'memory-source') {
@@ -203,17 +215,19 @@ document.addEventListener('click', async event => {
     if (action === 'snooze-current') { await api.invoke('update-task', { id: editing.id, action: 'snooze' }); $('#editor').close(); toast('将在 15 分钟后再次提醒'); }
     if (action === 'analyze') {
       if (busy) return; busy = true; button.disabled = true; button.innerHTML = icon('refresh'); button.setAttribute('aria-label', '正在分析');
-      const revision = captureRevision;
+      const revision = captureRevision, session = captureSession;
       resetCapturePreview();
       try {
         const result = await api.invoke('analyze', $('#capture-text').value);
+        if (session !== captureSession) return;
         if (revision !== captureRevision) { toast('输入已修改，请重新分析'); return; }
         preview = result;
         document.body.classList.add('has-preview');
         $('#capture-key-hint').innerHTML = '<kbd>↵</kbd> 添加 <span class="hint-divider">·</span> 点外部收起';
         $('#capture-result').innerHTML = `<form id="capture-save-form"><div class="preview-heading"><span>提醒预览</span><span>${preview.remindAt ? '确认时间后添加' : '时间待确认'}</span></div>${fieldsMarkup(preview)}<details class="analysis-note"><summary>分析依据</summary><p>${esc(preview.reason)}</p>${memoryContextMarkup(preview)}</details>${preview.warning ? `<p class="warning">${esc(preview.warning)}</p>` : ''}<div class="spotlight-save-row"><span>${preview.remindAt ? dateText(preview.remindAt) : '可稍后补充时间'}</span><button type="submit" class="primary">${preview.remindAt ? '添加提醒' : '保存待确认'} <span class="button-shortcut">↵</span></button></div></form>`;
         await api.invoke('capture-layout', 'preview');
-      } finally { busy = false; button.disabled = false; button.innerHTML = icon('arrow'); button.setAttribute('aria-label', '分析提醒'); }
+      } catch (error) { if (session === captureSession) throw error; }
+      finally { if (session === captureSession) { busy = false; button.disabled = false; button.innerHTML = icon('arrow'); button.setAttribute('aria-label', '分析提醒'); } }
     }
     if (action === 'test-notification') { await api.invoke(action); toast('已请求系统发送测试通知'); }
     if (action === 'resume-mail') { await api.invoke('resume-mail'); toast('已解除暂停，点击同步重试'); }
@@ -236,13 +250,23 @@ document.addEventListener('input', event => {
   if (event.target.id === 'memory-search') { memoryQuery = event.target.value; renderMemoryList(); }
   if (event.target.id === 'memory-filter') { memoryFilter = event.target.value; renderMemoryList(); }
   if (event.target.id === 'search') { query = event.target.value; renderTaskList(); }
+  if (event.target.id === 'chat-input') chatDraft = event.target.value;
   if (event.target.id === 'capture-text') { captureRevision++; resetCapturePreview(); }
 });
 document.addEventListener('submit', async event => {
   event.preventDefault(); const form = event.target; const button = form.querySelector('button[type="submit"]');
+  const formSession = captureSession;
   if (button?.disabled) return;
   try {
     if (button) button.disabled = true;
+    if (form.id === 'chat-form') {
+      if (chatBusy || !chatDraft.trim()) return;
+      const text = chatDraft.trim(); chatBusy = true; chatDraft = '';
+      chatMessages.push({role:'user',text,detail:{},actions:[]}); renderChatPanel();
+      try { await api.invoke('chat-send', text); }
+      catch (error) { if (!chatDraft) chatDraft = text; throw error; }
+      finally { chatBusy = false; await refresh(); await loadChat(); if (view === 'chat') $('#chat-input').focus(); }
+    }
     if (form.id === 'memory-form') {
       const fields = Object.fromEntries(new FormData(form));
       if (form.dataset.memoryId) fields.id = form.dataset.memoryId;
@@ -261,6 +285,7 @@ document.addEventListener('submit', async event => {
       if (!preview) throw new Error('请先分析输入内容');
       $('#capture-text').disabled = true; $('#analyze-button').disabled = true;
       await api.invoke('save-capture', { token: preview.token, fields: getTaskFields(form) });
+      if (formSession !== captureSession) return;
       preview = null; $('#app').innerHTML = captureMarkup(); document.body.classList.remove('has-preview');
       await api.invoke('capture-layout', 'input'); await api.invoke('hide-capture');
     }
@@ -282,11 +307,12 @@ document.addEventListener('submit', async event => {
   } catch (error) { toast(error.message, true); }
   finally {
     if (button) button.disabled = false;
-    if (form.id === 'capture-save-form') { $('#capture-text').disabled = false; $('#analyze-button').disabled = false; }
+    if (form.id === 'capture-save-form' && formSession === captureSession) { $('#capture-text').disabled = false; $('#analyze-button').disabled = false; }
   }
 });
 document.addEventListener('keydown', event => {
   if (event.isComposing || event.keyCode === 229) return;
+  if (event.target.id === 'chat-input' && event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!chatBusy) $('#chat-form').requestSubmit(); return; }
   if (event.key === 'Escape' && isCapture) { event.preventDefault(); void api.invoke('hide-capture').catch(e => toast(e.message, true)); }
   if (isCapture && event.key === 'Enter' && !event.shiftKey && (event.ctrlKey || event.metaKey || event.target.id === 'capture-text')) {
     event.preventDefault();
@@ -298,6 +324,12 @@ document.addEventListener('keydown', event => {
   if (!isCapture && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f' && $('#search')) { event.preventDefault(); $('#search').focus(); }
 });
 api.onChange(() => refresh().catch(e => toast(e.message, true)));
+api.onCaptureReset(() => {
+  if (!isCapture) return;
+  captureSession++; captureRevision++; busy = false; preview = null;
+  $('#app').innerHTML = captureMarkup(); document.body.classList.remove('has-preview');
+  clearTimeout(toast.timer); $('#toast').className = '';
+});
 api.onCapture(() => { requestAnimationFrame(() => { const field = $('#capture-text'); if (field && document.activeElement !== field) { field.focus({ preventScroll: true }); field.setSelectionRange(field.value.length, field.value.length); } }); });
 try {
   await refresh();
