@@ -5,12 +5,12 @@ import os from 'node:os';
 import http from 'node:http';
 import assert from 'node:assert/strict';
 
-const dir = mkdtempSync(path.join(os.tmpdir(), 'shiguang-desktop-'));
+const dir = mkdtempSync(path.join(os.tmpdir(), 'lono-desktop-'));
 const artifacts = path.resolve('artifacts'); mkdirSync(artifacts, { recursive: true });
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
 const shellPaths=process.platform==='win32'?['Electron.lnk','LoNo.lnk'].map(name=>path.join(process.env.APPDATA,'Microsoft/Windows/Start Menu/Programs',name)):[];
 const shellBefore=shellPaths.map(file=>existsSync(file)?readFileSync(file).toString('base64'):null);
-const launch = () => electron.launch({ executablePath: process.env.SHIGUANG_EXECUTABLE || undefined, args: [...(process.env.SHIGUANG_EXECUTABLE ? [] : [process.env.SHIGUANG_APP || '.']), '--smoke', `--data-dir=${dir}`], env, timeout: 30000 });
+const launch = () => electron.launch({ executablePath: process.env.LONO_EXECUTABLE || undefined, args: [...(process.env.LONO_EXECUTABLE ? [] : [process.env.LONO_APP || '.']), '--smoke', `--data-dir=${dir}`], env, timeout: 30000 });
 async function mainPage(app) {
   const deadline = Date.now() + 15000;
   while (Date.now() < deadline) {
@@ -73,7 +73,7 @@ try {
       const link = shell.readShortcutLink(app.getPath('userData') + '/shell/LoNo.lnk');
       return { appId: link.appUserModelId, iconPath: link.icon, target: link.target, args: link.args, packaged: app.isPackaged, executable: process.execPath };
     });
-    assert.equal(identity.appId, 'com.shiguang.reminder');
+    assert.equal(identity.appId, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).build.appId);
     assert.equal(existsSync(identity.iconPath), true);
     assert.match(path.basename(identity.iconPath), /^lono-[a-f0-9]{12}\.ico$/);
     assert.equal(identity.target, identity.executable);
@@ -590,5 +590,5 @@ try {
   assert.equal((await memoryRestarted.evaluate(()=>window.reminder.invoke('snapshot'))).records.length,beforeDelete,'deleting tasks retains source records');
   assert.deepEqual(errors, []);
   shellPaths.forEach((file,index)=>assert.equal((existsSync(file)?readFileSync(file).toString('base64'):null)===shellBefore[index],true,'desktop tests do not change real Windows shortcuts'));
-  console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, fresh capture on dismissal and late-response isolation, Agent chat create/edit/delete/batch/memory/restart, multi-reminder capture selection/edit/save, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication, memory review/source/recall/edit/search/add/delete/restart', executable: process.env.SHIGUANG_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', assertions: 'compact/expanded capture layout, keyboard analyze/save, fresh capture on dismissal and late-response isolation, Agent chat create/edit/delete/batch/memory/restart, multi-reminder capture selection/edit/save, Ctrl+F search, completion/restore/edit, encrypted settings, bridge + Agent, deduplication, export, sandbox, shortcut conflict handling, restart, notification failure/retry/deduplication, memory review/source/recall/edit/search/add/delete/restart', executable: process.env.LONO_EXECUTABLE || 'development Electron', dataDir: dir, screenshots: artifacts }, null, 2));
 } finally { if (app) await app.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

@@ -8,7 +8,7 @@ import { analyze, analyzeLocal } from '../src/core/analyzer.js';
 import { extractMemories, extractLocalMemories } from '../src/core/memory.js';
 
 test('durable workflow candidates retain evidence, deduplicate, require approval and survive restart', async () => {
-  const file = path.join(mkdtempSync(path.join(os.tmpdir(), 'shiguang-memory-')), 'test.sqlite');
+  const file = path.join(mkdtempSync(path.join(os.tmpdir(), 'lono-memory-')), 'test.sqlite');
   let store = await Store.open(file);
   const text = '报销流程通常先整理发票，再提交部门审核。明天提交材料。';
   const { recordId } = store.ingest({ text }, analyzeLocal(text));

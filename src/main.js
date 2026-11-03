@@ -317,7 +317,7 @@ function registerIPC() {
     sendNotification('提醒测试', '系统通知已触发；若未看到，请检查系统通知与勿扰设置。', false);
   });
   handle('export', async () => {
-    const target = await dialog.showSaveDialog(mainWindow, { title: '导出本地记录（不含凭据）', defaultPath: 'shiguang-backup.json', filters: [{ name: 'JSON', extensions: ['json'] }] });
+    const target = await dialog.showSaveDialog(mainWindow, { title: '导出本地记录（不含凭据）', defaultPath: 'LoNo-backup.json', filters: [{ name: 'JSON', extensions: ['json'] }] });
     if (!target.canceled) fs.writeFileSync(target.filePath, JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), tasks: store.tasks(), records: store.records(null), memories: store.memories(), chat: chatStore.messages(0) }, null, 2));
     return !target.canceled;
   });

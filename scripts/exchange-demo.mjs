@@ -11,7 +11,7 @@ const video = process.argv.includes('--video');
 const timed = process.argv.includes('--timer');
 const cleanVideo = process.argv.includes('--clean-video');
 const timeline = []; let recordingStart = 0;
-const dir = mkdtempSync(path.join(os.tmpdir(), 'shiguang-ews-demo-'));
+const dir = mkdtempSync(path.join(os.tmpdir(), 'lono-ews-demo-'));
 const output = path.resolve('artifacts/demo'); mkdirSync(output, { recursive: true });
 async function workspace(app) {
   const deadline = Date.now() + 30000;
@@ -33,7 +33,7 @@ const server = http.createServer((req, res) => {
   });
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const appArgs = process.env.SHIGUANG_EXECUTABLE ? [] : [process.env.SHIGUANG_APP || '.'];
+const appArgs = process.env.LONO_EXECUTABLE ? [] : [process.env.LONO_APP || '.'];
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
 const cue = async (title, subtitle, hold = 2000) => {
   console.log(title);
@@ -52,7 +52,7 @@ const cue = async (title, subtitle, hold = 2000) => {
   }
 };
 try {
-  app = await _electron.launch({ executablePath: process.env.SHIGUANG_EXECUTABLE || undefined, args: [...appArgs, '--smoke', `--data-dir=${dir}`], env, ...(video ? { recordVideo: { dir: path.join(output, 'raw'), size: { width: 1260, height: 850 } } } : {}) });
+  app = await _electron.launch({ executablePath: process.env.LONO_EXECUTABLE || undefined, args: [...appArgs, '--smoke', `--data-dir=${dir}`], env, ...(video ? { recordVideo: { dir: path.join(output, 'raw'), size: { width: 1260, height: 850 } } } : {}) });
   recordingStart = Date.now();
   main = await workspace(app);
   await main.locator('[data-view="settings"]').waitFor();
@@ -133,13 +133,13 @@ try {
   await main.screenshot({ path: path.join(output, 'exchange-workflow.png') });
   const recording = main.video();
   await app.close(); app = undefined;
-  if (recording) { await recording.saveAs(path.join(output, 'shiguang-exchange-demo.webm')); writeFileSync(path.join(output, 'timeline.json'), JSON.stringify(timeline, null, 2)); }
+  if (recording) { await recording.saveAs(path.join(output, 'lono-exchange-demo.webm')); writeFileSync(path.join(output, 'timeline.json'), JSON.stringify(timeline, null, 2)); }
   // Verify a new process restores both cursor and approved memory from SQLite.
-  app = await _electron.launch({ executablePath: process.env.SHIGUANG_EXECUTABLE || undefined, args: [...appArgs, '--smoke', `--data-dir=${dir}`], env });
+  app = await _electron.launch({ executablePath: process.env.LONO_EXECUTABLE || undefined, args: [...appArgs, '--smoke', `--data-dir=${dir}`], env });
   const restarted = await workspace(app); await restarted.locator('[data-view="memories"]').waitFor();
   const restored = await restarted.evaluate(() => window.reminder.invoke('snapshot'));
   assert.equal(restored.records.length, 4); assert.equal(restored.memories[0].status, 'approved');
   assert.equal(restored.settings.mail.hasPassword, true);
-  const report = { passed: true, realTimer: timed, simulatedMailboxAndModel: true, records: 4, tasks: 3, memory: 1, operations: calls.length, video: video ? 'shiguang-exchange-demo.webm' : null };
+  const report = { passed: true, realTimer: timed, simulatedMailboxAndModel: true, records: 4, tasks: 3, memory: 1, operations: calls.length, video: video ? 'lono-exchange-demo.webm' : null };
   writeFileSync(path.join(output, video ? 'video-report.json' : 'test-report.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report));
 } finally { if (app) await app.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

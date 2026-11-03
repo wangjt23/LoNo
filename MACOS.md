@@ -36,13 +36,13 @@ electron-builder 支持通过 `CSC_LINK`、`CSC_KEY_PASSWORD` 载入证书，通
 - 快速记录：`Command+Shift+Space`；备用 `Command+Option+Space`。系统占用时会显示备用键或冲突提示。
 - 搜索：`Command+F`。应用菜单提供编辑、隐藏、退出，Dock 图标可重新打开主窗口。
 - 关闭主窗口后在菜单栏继续运行；从菜单栏或应用菜单退出后停止提醒。
-- 本地数据：`~/Library/Application Support/shiguang-reminder`。密码和密钥使用 macOS Keychain；Windows 加密的凭据不能直接迁移到 Mac。
+- 本地数据目录位于 `~/Library/Application Support/`，准确路径在偏好设置中显示，升级沿用既有目录。密码和密钥使用 macOS Keychain；Windows 加密的凭据不能直接迁移到 Mac。
 - 在目标 Mac 验证：DMG 拖拽安装、启动与更新、菜单栏深浅色、快捷键冲突与快速输入、首次通知授权与点击通知、睡眠唤醒补提醒、登录启动开关、退出与重新启动后的数据保存。真实邮箱/EWS 登录仍需独立验证。
 
 打包应用自动验证示例（arm64，Intel 将 `mac-arm64` 改为 `mac`）：
 
 ```sh
-SHIGUANG_EXECUTABLE="$PWD/release/mac-arm64/LoNo.app/Contents/MacOS/LoNo" npm run test:desktop
+LONO_EXECUTABLE="$PWD/release/mac-arm64/LoNo.app/Contents/MacOS/LoNo" npm run test:desktop
 ```
 
 桌面测试使用独立临时数据和模拟通知，不能代替系统通知、Keychain 授权、登录项或真实邮箱的实机验收。

@@ -6,6 +6,8 @@ import { brandIconSet } from './core/brand.js';
 import { trayIcon } from './icon.js';
 import { Notification } from 'electron';
 
+// Stable installation identity, not a display name. Must match build.appId;
+// changing it would split existing shortcuts and notification registrations.
 export const WINDOWS_APP_ID = 'com.shiguang.reminder';
 export const WINDOWS_TOAST_CLSID = '{04C012C4-7BE6-48E1-92C2-D73B85AE814F}';
 

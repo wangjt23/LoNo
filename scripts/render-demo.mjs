@@ -5,7 +5,7 @@ import path from 'node:path';
 
 const output = path.resolve('artifacts/demo');
 const assets = path.resolve('.runtime/demo-public'); mkdirSync(assets, { recursive: true });
-copyFileSync(path.join(output, 'shiguang-exchange-demo.webm'), path.join(assets, 'app.webm'));
+copyFileSync(path.join(output, 'lono-exchange-demo.webm'), path.join(assets, 'app.webm'));
 copyFileSync(path.resolve('src/ui/brand.svg'), path.join(assets, 'brand.svg'));
 const timeline = JSON.parse(readFileSync(path.join(output, 'timeline.json'), 'utf8'));
 // Keep real UI action footage, trim idle intervals, and reserve readable captions.

@@ -14,7 +14,7 @@ if (process.argv.some(arg => /^--(?:password|pass|secret)=/i.test(arg))) throw n
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const runtime = createRequire(import.meta.url)('electron');
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
-const profile = mkdtempSync(path.join(os.tmpdir(), 'shiguang-exchange-test-'));
+const profile = mkdtempSync(path.join(os.tmpdir(), 'lono-exchange-test-'));
 const child = spawn(runtime, [root, `--data-dir=${profile}`, '--exchange-test', `--endpoint=${endpoint.href}`, `--account=${account}`], { cwd: root, env, detached: true, stdio: 'ignore', windowsHide: false });
 child.on('error', () => { console.error('Exchange 测试窗口启动失败'); process.exitCode = 1; });
 child.unref();

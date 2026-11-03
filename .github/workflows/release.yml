@@ -64,7 +64,7 @@ jobs:
           node scripts/package-folder.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $env:SHIGUANG_EXECUTABLE = (Resolve-Path "release/LoNo-$version/LoNo.exe").Path
+          $env:LONO_EXECUTABLE = (Resolve-Path "release/LoNo-$version/LoNo.exe").Path
           npm run test:desktop
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npx electron-builder --config electron-builder.installer.cjs --win nsis --x64 --prepackaged "release/LoNo-$version" --publish never
@@ -92,7 +92,7 @@ jobs:
         if: matrix.platform == 'mac'
         run: npm run test:desktop
         env:
-          SHIGUANG_EXECUTABLE: ${{ runner.temp }}/lono-install/LoNo.app/Contents/MacOS/LoNo
+          LONO_EXECUTABLE: ${{ runner.temp }}/lono-install/LoNo.app/Contents/MacOS/LoNo
       - name: Save packages
         uses: actions/upload-artifact@v4
         with:

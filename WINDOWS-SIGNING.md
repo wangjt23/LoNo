@@ -25,7 +25,7 @@
 v0.1.1 的启动失败来自 Windows Smart App Control（智能应用控制），不是业务代码异常：
 
 - 只读注册表检查 `VerifiedAndReputablePolicyState=1`，表示强制执行。
-- CodeIntegrity 事件 3077 指向 `release/win-unpacked/Shiguang Reminder.exe`，策略 ID 为 `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`。
+- CodeIntegrity 事件 3077 指向当时的 `release/win-unpacked/` 目录版主程序，策略 ID 为 `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`。
 - 打包主程序未签名；本机证书库没有发现代码签名证书，签名相关环境变量未配置。
 - 用户确认没有代码签名证书。因此目前无法完成可信签名及打包程序运行测试。
 - `CiTool -lp -json` 返回访问被拒绝；未据此推断存在额外的企业自定义策略。
@@ -40,14 +40,14 @@ Smart App Control 对未知、未签名程序可能阻止执行。微软说明�
 
 拿到可用签名凭据后，选择一种方式：
 
-1. Windows 证书库：设置 `SHIGUANG_SIGNING_THUMBPRINT`，内容为有可用私钥/硬件令牌支持的代码签名证书指纹。
+1. Windows 证书库：设置 `LONO_SIGNING_THUMBPRINT`，内容为有可用私钥/硬件令牌支持的代码签名证书指纹。
 2. 可导出的受信任证书文件：通过本机环境提供 `WIN_CSC_LINK` 和需要时的 `WIN_CSC_KEY_PASSWORD`。不要在命令历史、源码或聊天中填写密码。现代硬件/云签名证书未必提供 PFX，应使用其供应商支持的签名集成。
 
 不要同时配置两种方式。证书文件、密码、私钥不进入 Git。仓库忽略 PFX/P12，但不应仅依赖忽略规则保护凭据。
 
 ```powershell
 npm run dist:win:signed
-$env:SHIGUANG_EXECUTABLE = (Resolve-Path 'release-signed/win-unpacked/Shiguang Reminder.exe').Path
+$env:LONO_EXECUTABLE = (Resolve-Path 'release-signed/win-unpacked/LoNo.exe').Path
 npm run test:desktop
 ```
 

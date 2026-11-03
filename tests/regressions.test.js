@@ -61,7 +61,7 @@ test('late notification callback cannot mark an edited or snoozed schedule as de
 });
 
 test('failed disk writes roll back inserts, edits and cursors in memory and on disk', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shiguang-io-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lono-io-'));
   const filename = path.join(dir, 'records.sqlite'); const store = await Store.open(filename);
   const originalRename = fs.renameSync;
   try {
@@ -81,7 +81,7 @@ test('failed disk writes roll back inserts, edits and cursors in memory and on d
 });
 
 test('existing SQLite databases migrate without losing tasks', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shiguang-migrate-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lono-migrate-'));
   const filename = path.join(dir, 'records.sqlite'); let store = await Store.open(filename);
   try {
     const a = analysis(); store.ingest({ key: 'existing', text: '提交材料' }, a, a);

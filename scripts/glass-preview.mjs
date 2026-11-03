@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 // A controlled local scene shows real compositor blur without capturing work data.
 const output = path.resolve('artifacts'); mkdirSync(output, { recursive: true });
 const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
-const app = await electron.launch({ args: ['.', '--smoke', `--data-dir=${mkdtempSync(path.join(os.tmpdir(), 'shiguang-glass-'))}`], env });
+const app = await electron.launch({ args: ['.', '--smoke', `--data-dir=${mkdtempSync(path.join(os.tmpdir(), 'lono-glass-'))}`], env });
 try {
   let main;
   for (let i = 0; i < 100 && !main; i++) {

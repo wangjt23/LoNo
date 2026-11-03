@@ -33,7 +33,7 @@ npm run dist:win
 打包程序也可使用同一套桌面测试：
 
 ```powershell
-$env:SHIGUANG_EXECUTABLE = (Resolve-Path 'release/LoNo-0.3.11/LoNo.exe').Path
+$env:LONO_EXECUTABLE = (Resolve-Path 'release/LoNo-0.3.11/LoNo.exe').Path
 npm run test:desktop
 ```
 
@@ -134,7 +134,7 @@ Authorization: Bearer <bridge-token>
 
 ## 本地数据与版本管理
 
-默认数据目录为 `%APPDATA%/shiguang-reminder`，准确路径在偏好设置中显示。SQLite `reminders.sqlite` 保存事项、原文、分析和游标；`settings.json` 保存配置及系统加密后的凭据。文本记录**不做整库加密**，请按工作数据要求保护 Windows 账号和设备。
+Windows 默认数据目录位于 `%APPDATA%` 下，准确路径在偏好设置中显示；升级沿用既有目录。SQLite `reminders.sqlite` 保存事项、原文、分析和游标；`settings.json` 保存配置及系统加密后的凭据。文本记录**不做整库加密**，请按工作数据要求保护 Windows 账号和设备。
 
 「导出记录」包含全部事项及来源，不包含连接密钥；导出是 JSON 归档，首版没有通用备份恢复 UI。完整恢复应在退出应用后备份/还原整个数据目录，系统凭据可能无法跨账号/设备解密。不要将数据库、配置或导出文件提交到 Git。
 
@@ -185,7 +185,7 @@ DeepSeek 官方预设：完整地址 https://api.deepseek.com/chat/completions�
 
 ## 0.2.4 LoNo
 
-品牌统一为 LoNo，英文全称 Loop Notify，不设置中文品牌名。图标采用学院深莓紫底色、两个环和一个提醒圆点；窗口、托盘、桌面入口及演示视频均同步更新。内部 appId、包名及 shiguang-reminder 数据目录保留以兼容既有数据库和凭据，界面不显示旧品牌。
+品牌统一为 LoNo，英文全称 Loop Notify，不设置中文品牌名。图标采用学院深莓紫底色、两个环和一个提醒圆点；窗口、托盘、桌面入口及演示视频均同步更新。源码包名为 `lono`。安装器与系统通知的内部 appId、既有数据目录保留历史标识，避免升级后重复安装或丢失数据库与加密凭据；这些兼容标识不作为产品名称展示。
 
 默认每10分钟同步邮件和已连接来源；本次也将现有本机配置设为10分钟。启动、唤醒与手动点击同步仍会主动检查，不改变到期通知的15秒检查周期。
 
