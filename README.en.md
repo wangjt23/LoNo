@@ -92,6 +92,10 @@ Need a reminder one day before important meetings? Does a progress report need a
 
 If a shortcut is unavailable, the app shows the fallback or conflict status. You can also use the Quick Capture button. Clicking outside the capture window or pressing Esc discards unsaved input.
 
+## Batch reminders and Agent actions
+
+With a model enabled, Quick Capture can split a course schedule into multiple reminders. Review and edit each item, deselect unwanted ones, then save the selection together. Agent chat can propose creating, editing, deleting, completing, or restoring reminders, with individual or batch confirmation. Deleting a reminder keeps its original source and chat action history.
+
 ## Download and install
 
 Visit **[GitHub Releases](https://github.com/wangjt23/LoNo/releases)** for release notes and downloads.
